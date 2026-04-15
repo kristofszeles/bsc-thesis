@@ -1,0 +1,37 @@
+{
+  "game": {
+    "cameraFov": 60.0,
+    "mouseSensitivity": 0.2,
+    "renderDistance": 30,
+    "singlePlayer": {
+      "health": 100,
+      "highScore": 0,
+      "score": 10000
+    },
+    "vehicle": 37
+  },
+  "maze": {
+    "easy": {
+      "height": 5,
+      "width": 5
+    },
+    "hard": {
+      "height": 40,
+      "width": 40
+    },
+    "medium": {
+      "height": 10,
+      "width": 10
+    }
+  },
+  "multiplayer": {
+    "defaultHost": "localhost",
+    "defaultPort": 9999,
+    "playerName": "asdasdwdas3"
+  },
+  "window": {
+    "defaultHeight": 996,
+    "defaultWidth": 1920,
+    "maximized": true
+  }
+}

@@ -1,0 +1,752 @@
+\chapter{Fejlesztői dokumentáció} % Developer guide
+\label{ch:impl}
+
+Ebben a fejezetben a játékmotor működését és felépítését fejtem ki részletesen. Az alfejezetekben, a 3.2 ponttól külön kifejtésre kerülnek a játékot alkotó osztályok használata, illetve a főbb metódusaikhoz biztosítok bővebb leírást.
+
+\section{A fordításhoz szükséges eszközök}
+
+A játékmotor a jelenlegi legújabb C++20-as szabványnak megfelelően íródott, ezért a fordításhoz szükség van a legfrissebb fejlesztői eszközök beszerzésére és telepítésére. A következő fejezetekben a különböző platformokra való fordításra adok megoldásokat.
+
+\subsection{Fordítás Windows rendszeren}
+
+Windows rendszereken a fordítás a Visual Studio 2019 fejlesztői környezetben történik. A szoftver ingyenesen elérhető Community verziója számomra a fordításhoz megfelelőnek bizonyult, azonban itt szükség van a C++ támogatás telepítésére. A szakdolgozat mappájában található \verb|sln| fájlt megnyitva betöltésre kerül a két projekt (maze-game, maze-server), amelyeket azonnal fordítani és futtatni lehet.
+
+\subsection{Fordítás Linux rendszeren}
+
+Linux rendszereken a fordításhoz különböző csomagokat kell telepíteni. A fordítás megkönnyítéséhez projektmappákban (maze-game, maze-server) lévő shell scripteket biztosítom segítségül. Ezen fájlok futtatásával kényelmesen végrehajtható állomány generálható a forráskódból a g++ fordítóval.
+
+Debian alapú rendszereken a fordítást megelőzően az alábbi csomagokat kell telepíteni:
+
+\begin{itemize}
+	\item g++-10
+	\item libsdl2-dev
+	\item libsdl2-image-dev
+	\item libsdl2-net-dev
+	\item libgtk-3-dev
+	\item libglm-dev
+	\item libglew-dev
+	\item libglu1-mesa-dev
+	\item zlib1g-dev
+\end{itemize}
+
+\section{A játékprogram (maze-game)}
+
+A játékmotort alapvetően a \verb|Game| osztály reprezentálja. A program indításakor az osztály példányosításra kerül a fő belépési pontként szolgáló \verb|main()| függvényben. Miután létrejött az objektum, meghívásra kerül a \verb|run()| metódusa. Ekkor elindul a játék fő ciklusa, ami egészen addig ismétlődik, amíg a játék ki nem lép, azaz a \verb|quit| adattagja igaz értékű nem lesz. A ciklusmag 3 fő részre bontható:
+
+\begin{itemize}
+	\item rajzolás a képernyőre (draw előtagú metódusok)
+	\item felhasználó által kiváltott események kezelése (handle előtagú metódusok)
+	\item kirajzolt kép megjelenítése (updateMapFrame, updateMenuFrame)
+\end{itemize}
+
+\subsection{A Game osztály}
+
+A \verb|Game| osztály a játékmotor fő egységét képezi. Főként a képernyőre rajzoláshoz, illetve az eseménykezeléshez kapcsolódó metódusokat valósítja meg. Az adattagjai között van tárolva például az aktuálisan betöltött pálya (azaz a labirintus), illetve minden olyan változó, konstans, vagy objektum, amelyek a játék működéséhez elengedhetetlenek. Az osztályhoz tartozó főbb objektumok a következők:
+
+\begin{itemize}
+	\item \verb|map|: pálya
+	\item \verb|menu|: játékmenü
+	\item \verb|window|: programablak
+	\item \verb|config|: konfiguráció
+	\item \verb|client|: hálózati kliens
+	\item \verb|drawUtils|: kirajzoláshoz szükséges eszközök
+\end{itemize}
+
+\subsubsection{A run metódus}
+
+A \verb|Game| osztály \verb|run()| metódusa a játékmotor futtatását végzi. Egy ciklust tartalmaz, amely a kilépésig ismétlődik. A cikluson belül egy elágazás található, amely eldönti, hogy a játékprogram mely részén van a felhasználó és ez alapján milyen műveleteket kell kezelni, illetve végrehajtani. Például, hogy a játékmenüben egy gombra kattintva melyik almenü jelenjen meg. Továbbá itt történik a képernyőre rajzoláshoz tartozó metódusok meghívása (\verb|drawMenu()|, \verb|drawMap()|, \verb|drawHUD()|), amelyek a grafikus felület, illetve a pálya megjelenítését végzik.
+
+\subsubsection{A loadMeshes metódus}
+
+Az osztály \verb|loadMeshes()| metódusával betöltöm a \verb|models| mappában található \verb|obj| kiterjesztésű fájlokat a \verb|meshes| nevű mapbe. Ez a map tulajdonképpen egy olyan asszociatív tömb, amelyben a modell fájlneve a kulcs, a modellre mutató pointer (\verb|Mesh*|) pedig az érték, ezáltal könnyebb rájuk hivatkozni. Az entitásokat a példányosításuk során rendelem hozzá ezekhez a modellekhez. Egy entitáshoz mindig csak egy modell tartozik, de egy modellhez több entitás is tartozhat.
+
+\subsubsection{Shaderek}
+
+A játékmotor különböző shadereket (vertex shader, fragment shader) használ a háromdimenziós megjelenítéshez. A shader lényegében egy kis program, mellyel a render pipeline különböző szintjeit lehet programozni. Ezen shaderek a \verb|shaders.h| fájlban vannak stringként definiálva, így elérhető, hogy ne kelljen mindig egy külső fájlból betölteni a shader kódját. A program egy vertex shadert és két különböző fragment shadert használ.
+
+A \verb|vertexShader| a játékos és a kirajzolt vertexek távolsága alapján a renderelési távolságot (\verb|renderDistance|) figyelembe véve kiszámítja, hogy egy adott modellnek mekkora legyen az átlátszatlansága (\verb|opacity|). Minél távolabb van egy entitás modellje a játékos pozíciójától (\verb|playerPos|), annál kisebb értéket fog felvenni az átlátszatlanság. A felvett értéke 0,0 és 1,0 között mozoghat, ezért ezt a \verb|clamp()| függvény segítségével lekorlátozom.
+
+A \verb|fragmentShader1| fragment shader akkor kerül felhasználásra, amikor szükség van a háromdimenziós modellek megvilágítására. Ilyenkor adott a fényforrás pozíciója, az erőssége, valamint a színe. Az ambiens és diffúz fények alapján kiszámolom a kirajzolt pixelek színét (\verb|fs_out_col|). Emellett van egy \verb|opacity| bemeneti paramétere is, amellyel a modell átlátszatlansága adható meg. Erre azért van szükség, hogy a renderelési távolsághoz egyre közelebb eső falak átlátszatlansága fokozatosan csökkenjen, ezáltal sokkal látványosabb kép kapható a látótávolság sugaráról.
+
+A \verb|fragmentShader2| használata esetén nincsenek figyelembe véve a fények és mindig olyan színű pixeleket rajzolok ki, mint amilyenek a textúra pixelei, valamint az átlátszatlanság sem szabályozható. Erre például a \verb|skybox| kirajzolásakor van szükség, ugyanis a doboz belső lapjainak azonos fényerejűnek kell lenniük a megfelelő effektus eléréséhez. A \verb|skybox| egy olyan nagy méretű kocka, amelynek belső lapjai valamilyen textúrával rendelkeznek. Ez a kocka körülveszi a pályát, ezáltal olyan hatást kelt, mintha a labirintus valamilyen környezetben lenne (például sivatag), így ennek használata a megfelelő látvány elérése szempontjából elengedhetetlen.
+
+\subsubsection{A drawMap metódus}
+
+A \verb|drawMap()| metódusban a játékmotorba betöltött pályát rajzolom a képernyőre. A játékos pozíciójától függően \verb|skybox|-ot rajzolok a pálya köré a \verb|drawSkybox()| metódussal, majd kirajzolok a pálya alá egy méretével megegyező padlót a \verb|drawFloor()| metódus segítségével. Végül a \verb|drawEntities()| metódus meghívásával kirajzolom a pálya entitásait reprezentáló poligonhálókat. Ennek működéséről a következő alfejezetben esik szó részletesebben.
+
+\subsubsection{A drawEntities metódus}
+
+A \verb|drawEntities()| metódussal a játékmotorba betöltött pálya (\verb|map|) entitásaihoz tartozó poligonhálókat rajzolom a képernyőre. Először egy for ciklussal végigiterálok az entitásokat tároló listán (\verb|entities|), majd az \verb|isHidden()| metódussal megvizsgálom, hogy az adott entitás nincs-e elrejtve, valamint, hogy a pozíciója a renderelési távolságon (\verb|renderDistance|) belülre esik-e. Ha a kettő feltétel közül valamelyik nem teljesül, akkor az entitás poligonhálója nem fog kirajzolásra kerülni. Így elkerülhető, hogy nagy labirintusok kirajzolása esetén a sok rajzolási művelet miatt a játékmotor futása lelassuljon.
+
+\subsubsection{A drawBillboard metódus}
+
+A \verb|drawBillboard()| metódussal a többjátékos módban a játékosok felett megjelenő névtáblák (billboard-ok) kirajzolását végzem. Ezek a billboard-ok olyan egyedi poligonhálók, amelyek esetén nem alkalmazok forgatást, illetve mélységtesztelést. Ezzel elérhető, hogy a névtáblák mindig a kamera felé ''nézzenek'' és ne rajzolódjanak eléjük más modellek (pl. falak). Így a pályán a falon keresztül látható a többi játékos névtáblája, ezáltal könnyebben meg lehet őket találni.
+
+A metódus működése hasonló a \verb|drawMesh()| működéséhez, azonban itt az előbb említett módon tiltva van a mélységtesztelés (\verb|GL_DEPTH_TEST|), valamint a nézetmátrix (\verb|view|) forgatáshoz tartozó komponense kinullázásra kerül.
+
+\subsubsection{A loadMap metódus}
+
+A \verb|loadMap()| metódusban a paraméterek alapján (\verb|data|, \verb|skyboxTexture|, \verb|tileTexture|) betöltöm a pályát az osztály \verb|map| adattagjába. A \verb|data| paraméter az entitások listája, amely \verb|std::stringstream| típusú, ez alapján fognak betöltődni a pályára a \verb|Map| osztály \verb|loadEntities()| metódusának alkalmazásával.
+
+A metódusnak létezik egy túlterhelt változata, amely csak a betölteni kívánt pályafájl nevét kapja paraméterként. Ilyenkor ebből a fájlból fogja beolvasni az entitások listáját, ami alapján betölti őket a játékmotorba.
+
+\subsubsection{A loadReceivedMap metódus}
+
+A \verb|loadReceivedMap()| metódussal a kliens által fogadott pályaadatok alapján betöltöm a pályát a játékmotorba. Lekérdezem a klienstől a kapott pálya adatait a \verb|getReceivedMap()| metódussal, amelyet paraméterként adok a \verb|loadMap()| metódusnak. Ezután a játékmotorba betöltött pálya memóriacímét a kliensnek adom a \verb|setMap()| metódus alkalmazásával, így az számára közvetlenül elérhetővé válik. Erre szükség van például a játékosok mozgatása esetén, amikor a szervertől fogadott üzenetek alapján mozgatni kell az ellenfeleket (\verb|opponents|) a pályán.
+
+\subsubsection{A handleCollisions metódus}
+
+A \verb|Game| osztály \verb|handleCollisions()| metódusával ütközésvizsgálatot végzek a pályán elhelyezkedő entitások között. Két egymásba ágyazott for ciklussal végigiterálok a pályán elhelyezkedő entitásokon. A külső for ciklusban először veszek egy entitást (\verb|entity1|), majd a belső for ciklusban egy másikat (\verb|entity2|). A másik entitással csak akkor végzek ütközésvizsgálatot, ha a \verb|COLLISION_DISTANCE| konstans által definiált távolságon belül található. Ilyenkor két egymástól messze lévő entitás között nem történik felesleges ütközésvizsgálat és nagy méretű pályák esetén nem okoz lassulást a metódus. Ha a másik entitás az ütközésvizsgálati távolságon kívülre esik, akkor a ciklus a \verb|continue| kulcsszóval továbblép.
+
+Következő lépésként az \verb|entity1| \verb|checkCollision()| metódusának paraméterként adva az \verb|entity2|-t eldöntöm, hogy a két entitás ütközik-e. Ha ütköznek (azaz a \verb|checkCollision()| igaz értéket ad vissza) akkor az \verb|entity2| típusától függően különböző műveleteket végzek, például tárgyak felvétele esetén elrejtem a tárgyat, majd pontot adok a játékosnak. Falakkal ütközés esetén a játékos nem mehet át a falon, így szükség van az ütközés feloldására. Ilyenkor meghívom a játékos (\verb|Player|) \verb|resolveCollision()| metódusát, amely megakadályozza, hogy átmenjen a falon, tulajdonképpen ''visszanyomja'' a falba ütköző játékost.
+
+\subsubsection{A handleMapEvents metódus}
+
+A \verb|handleMapEvents()| metódussal a pályán bekövetkező események kezelését végzem. Egy while ciklust tartalmaz, amely addig ismétlődik, amíg az SDL könyvtár \verb|SDL_PollEvent()| függvényhívása igaz értékkel tér vissza, azaz amíg létezik bekövetkezett esemény. Ezután az esemény típusától függően egy \verb|switch| esetszétválasztással különféle eseteket különböztetek meg, például, hogy a felhasználó egérgombot nyomott le (\verb|SDL_MOUSEBUTTONDOWN|), vagy, hogy bezárta a programot (\verb|SDL_QUIT|). Előfordulnak olyan események is, amelyeket a metóduson kívül kezelek le. Ilyenkor visszatérek a bekövetkezett esemény típusával (\verb|MapEvent|).
+
+\subsubsection{A handleMapKeyState metódus}
+
+A \verb|handleMapKeyState()| metódus a billentyűzet állapotát figyeli a játékmenet során. Az \verb|SDL_GetKeyboardState()| hívással lekérdezem ezt az állapotot, majd egy esetszétválasztás segítségével megvizsgálom, hogy éppen mely billentyűk voltak lenyomva. Ettől függően végzem a játékos mozgatását a pályán, azaz, ha például az előre mutató nyílgomb volt lenyomva, akkor a játékost a helyzetéhez képest előrefelé mozgatom. A játékos mozgatása a \verb|W|, \verb|A|, \verb|S|, \verb|D| gombokkal, valamint a nyílbillentyűkkel történik. Ha egyik ilyen gomb sem volt lenyomva, akkor a játékos gyorsulását 0-ra állítom a \verb|setAcceleration()| metódus használatával. Ilyenkor a játékos mozgása megáll.
+
+\subsubsection{A handleMenuEvents metódus}
+
+A \verb|handleMenuEvents()| metódussal a játékprogram menüjében bekövetkező eseményeket kezelem le, hasonlóan a \verb|handleMapEvents()| metódushoz. A metódus rendelkezik egy egész szám típusú visszatérési értékkel, amely megadja, hogy a menüben felsorolt gombok közül melyik indexűt (\verb|clickedButtonIndex|) nyomta meg a felhasználó. Ezt az eseményt kívül fogom lekezelni a jobb átláthatóság kedvéért. Ha nem történt gombra kattintás, akkor 0-val térek vissza. Ilyenkor vagy egy másik típusú esemény következett be, amely a metóduson belül lekezelésre került, vagy egyáltalán nem következett be esemény.
+
+\subsection{A Config osztály}
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=40mm]{config.png}
+	\caption{A Config osztály osztálydiagramja}
+\end{figure}
+
+A \verb|Config| osztály a játékmotor konfigurációját tárolja. Konstruktora betölti a paraméterként megadott konfigurációs fájlt a \verb|load()| metódus segítségével. Ha a fájl nem létezik, vagy hibás, akkor automatikusan létrehozom az alapértelmezett beállításokkal. A destruktorban pedig a \verb|save()| metódus meghívásával elmentem az általa tárolt beállításokat a konfigurációs fájlba. Ezáltal nem szükséges manuálisan meghívni a mentéshez és a betöltéshez tartozó metódusokat.
+
+\subsection{Az Entity osztály}
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=150mm]{entity.png}
+	\caption{Az Entity ősosztály és alosztályainak osztálydiagramja}
+\end{figure}
+
+Az \verb|Entity| absztrakt osztály a játékban létező entitások ősosztálya, ezt illusztrálja a 3.2. ábra. A hasonló tulajdonságokkal rendelkező, de különböző típusú entitások megkülönböztetésére öröklődést alkalmazok. Ez azért is hasznos, mert a közös metódusokat nem kell osztályonként újradefiniálni ugyanazzal az implementációval. Ilyen metódus például a koordináták lekérése, vagy az ütközésvizsgálat. Ebből az osztályból vannak származtatva azon osztályok, amelyek a megadott típusú entitásként kerülnek példányosításra. A játékban jelenleg az alábbi osztályok vannak származtatva, de ezek tetszés szerint bővíthetők:
+
+\begin{itemize}
+	\item \verb|Player|: játékos
+	\item \verb|Opponent|: ellenfél (többjátékos módban)
+	\item \verb|NPC|: számítógép által irányított karakter
+	\item \verb|Tile|: fal
+	\item \verb|Item|: tárgy (\verb|Emerald|, \verb|Gem|, \verb|Ruby|, \verb|Gold|, \verb|Start|, \verb|Finish|, \verb|FastPotion|, \verb|SlowPotion|)
+\end{itemize}
+
+\subsubsection{A run metódus}
+
+Az osztály \verb|run()| virtuális metódusának felüldefiniálásával megadható az entitás viselkedése a játékmotor futtatásakor. Alapvetően ez a metódus üres, tehát egy entitás alapvetően semmit sem csinál, statikusan áll egy helyben. Ilyenek például a falak, esetükben nincs szükség a mozgatásukra. A játékos (\verb|Player|), vagy a tárgyak (\verb|Item|) esetében azonban felül van definiálva, ugyanis ezek a játék során mozoghatnak. A játékost a felhasználó mozgatja, az NPC-ket a program irányítja, a tárgyak pedig a pályán lebegve forognak, illetve fel-le mozognak.
+
+\subsubsection{A HitBox struktúra}
+
+Az \verb|entity.h| fájlban definiált \verb|HitBox| struktúra egy adott entitást körülvevő doboz (\verb|HitBox|) oldallapjainak (\verb|front|, \verb|back|, \verb|right|, \verb|left|, \verb|top|, \verb|bottom|) a középponttól vett távolságait tárolja. A hitboxokat az ütközésvizsgálathoz tartozó \verb|checkCollision()| metódus fogja használni, amelyet a következő alfejezetben írok le részletesen.
+
+\subsubsection{A checkCollision metódus}
+
+A \verb|checkCollision()| metódus ütközésvizsgálatot végez egy másik, paraméterként megadott entitással (\verb|Entity*|). Itt a \verb|hitBox1| és a \verb|hitBox2| az entitások poligonhálójának kiterjedésével megegyező méretű hitboxok (téglatestek). Ellenőrizni kell, hogy a két doboznak van-e metszete, azaz legalább egy közös pontjuk. Ha létezik metszet, akkor a két entitás ütközik egymással. Ahhoz, hogy meg lehessen győződni a metszet létezéséről, többszintű elágazásokat alkalmazok. Ezek 3 szintű feltételek, amelyek mind a 3 tengelyen (x, y, z) leellenőrzik, hogy mely oldallapok (1, 2, 3, 4) értek egymásba.
+
+A hitbox ütköző oldalai egy vektorba kerülnek (\verb|collidingSides|), ugyanis több is lehet belőlük, de legfeljebb 2. Az elemszám alapján dől el a metódus visszatérési értéke és 3 fő eset kerül megkülönböztetésre:
+
+\begin{itemize}
+	\item \verb|collidingSides| elemszáma 0: nem történt ütközés, 0-val tér vissza
+	\item \verb|collidingSides| elemszáma 1: egy oldal ütközött, visszatér ezen oldal számával
+	\item \verb|collidingSides| elemszáma 2: két oldal ütközött, további eseteket kell megvizsgálni
+\end{itemize}
+
+Két oldal ütközése esetén meg kell vizsgálni, hogy az entitás melyik irányba mozgott az ütközés bekövetkezése előtt. Ezt az alapján lehet eldönteni, hogy a két oldal közül melyik oldal ér jobban a másik entitást körülvevő hitboxba. Ilyenkor ezen oldal számával tér vissza.
+
+\subsubsection{A resolveCollision metódus}
+
+A \verb|resolveCollision()| metódussal az ütközésvizsgálat során detektált ütközést lehet feloldani egy másik, paraméterként megadott entitással. Egy while ciklust tartalmaz, amely egészen addig ismétlődik, amíg az ütközés létezése fennáll a két entitás között. Ezt a \verb|checkCollision()| metódussal ellenőrzöm, amely visszatér az entitást körülvevő téglatestnek azon oldalának számával (1, 2, 3, 4), amellyel ütközött. Ha 0-val tér vissza, akkor nem történt ütközés. Az algoritmus a kapott szám alapján dönti el, hogy melyik irányba kell elmozgatni az entitást ahhoz, hogy a téglatesteknek ne legyen metszetük. De emellett figyelembe veszi azt is, hogy az entitás melyik tengelyen mozgott az ütközés előtt és a sebességével (\verb|xVel|, \verb|zVel|) megegyező sebességgel mozgatja vissza az irányával ellentétes irányba.
+
+\subsection{A Position struktúra}
+
+A \verb|Position| struktúra háromdimenziós koordinátákat (\verb|x|, \verb|y|, \verb|z|), valamint egy irányt tárol fokokban (\verb|angleY|). Leggyakrabban a pályán elhelyezkedő entitások helyzetének tárolására használom, de emellett a grafikus felületen megjelenő vezérlőelemek (például gombok, szövegek) pozícióját is ennek felhasználásával adom meg. Ezáltal nem szükséges minden egyes paramétert külön felsorolni, amikor például paraméterként adok át koordinátákat.
+
+\subsection{A Map osztály}
+
+A \verb|Map| osztályban elsősorban a pályát felépítő entitásokat tárolom. Erre a célra egy listát (\verb|std::list|) használok, amely entitásokra mutató pointereket (\verb|Entity*|) tartalmaz.
+
+\subsubsection{A loadEntities metódus}
+
+Az entitások betöltését a \verb|loadEntities()| metódussal végzem, amely a paraméterként megkapott stringstream-en (\verb|std::stringstream|) végigiterálva példányosítja a megfelelő típusú entitásokat (például \verb|Player|, vagy \verb|Tile|). A lista betöltése történhet egy szekvenciális inputfájlból, vagy karaktersorozatból is, amikor többjátékos módban a kliens fogadja a szerver által küldött pályát. A lista a következő paramétereket tárolja egy adott sorban:
+
+\begin{itemize}
+	\item \verb|type|: entitás típusa
+	\item \verb|x|: x koordináta
+	\item \verb|y|: y koordináta
+	\item \verb|z|: z koordináta
+	\item \verb|angle|: irány fokokban
+\end{itemize}
+
+A metódusban emellett meghatározásra kerülnek a pálya legkisebb (\verb|startX|, \verb|startZ|) és legnagyobb (\verb|endX|, \verb|endZ|) koordinátái az x és z tengelyen, amelyeket két-két egyszerű minimum és maximum kereséssel határozok meg. Ezekre a koordinátákra majd később a pálya méretének meghatározásában lesz szükség.
+
+\subsubsection{A saveState metódus}
+
+A \verb|saveState()| metódussal a pálya aktuális állapota menthető el a paraméterként megadott fájlba. Ez az állapot tartalmazza az entitások helyzetét, valamint az aktuálisan használt fal és skybox textúrák fájlneveit.
+
+\subsubsection{A generateTileMeshes metódus}
+
+A \verb|generateTileMeshes()| metódusban implementált algoritmussal a falakhoz egyedi poligonhálókat generálok. A falak tulajdonképpen kockák, amelyek egymás mellé rakva egy hosszabb falat alkotnak, így az algoritmus figyelembe veszi, hogy mely falak kerülnek egymás mellé. A közvetlenül egymást követő falakat ''egybeépíti'', megszünteti a közöttük lévő oldallapokat, ezáltal ezen falak egy nagyobb, téglatest alakú falként jelennek meg a pályán.
+
+\subsection{A Camera osztály}
+
+A \verb|Camera| osztállyal a kamera pozicionálását és mozgatását végzem polárkoordináta-rendszerben. A \verb|yaw| ($\theta$) és \verb|pitch| ($\phi$) értékeket a privát adattagokban tárolom lebegőpontos számként. A \verb|yaw| értéke a kamera oldalirányú elfordulását az Y tengelyen, a \verb|pitch| pedig a döntését határozza meg a Z tengelyen fokokban. Az osztály \verb|getPosition()| metódusával lekérhető a kamera koordinátavektora derékszögű koordináta-rendszerben. Másik főbb metódus az \verb|update()|, ami frissíti a $\theta$, $\phi$ értékeit a megszorításoknak megfelelően (0 $\leq$ $\theta$ < 360, -90 < $\phi$ < 90). A kamera koordinátáit tartalmazó vektor egy (\verb|x|, \verb|y|, \verb|z|) valós számhármas, amely a következő értékeket tartalmazza:
+
+\begin{equation}
+	\begin{pmatrix}
+		\cos\left(\phi\cdot\dfrac{\pi}{180}\right) \cdot \sin\left(\theta\cdot\dfrac{\pi}{180}\right) \\[10pt]
+		\sin\left(\phi\cdot\dfrac{\pi}{180}\right) \\[10pt]
+		\cos\left(\phi\cdot\dfrac{\pi}{180}\right) \cdot \cos\left(\theta\cdot\dfrac{\pi}{180}\right)
+	\end{pmatrix}
+	\in \mathbb{R}^3
+\end{equation}
+
+\subsubsection{A rotateTo metódus}
+
+A \verb|rotateTo()| metódussal a paraméterként megadott szögbe fordítható a kamera fokozatosan. Erre a menüben van szükség, amikor a program a labirintusjáték bemutatásaként automatikusan végighalad egy véletlenszerűen generált pályán és irányváltoztatáskor a haladási irányba fordítja a kamerát.
+
+\subsection{A Client osztály}
+
+A \verb|Client| osztály a hálózati kommunikációs műveleteket végzi kliensoldalon. A \verb|CppThread| \cite{cppthread} absztrakt osztály leszármazottja. Példányosítása után először manuálisan meghívásra kerül a \verb|start()| metódusa, amivel elindul egy külön szálon, majd a \verb|connectToServer()| metódusa, amellyel csatlakozik a szerverhez. Paraméterként a szerver IP címét és a portszámát kell megadni. Sikeres csatlakozás esetén az osztály \verb|connected| adattagját igaz értékűre állítom. Ezután a \verb|sendMessage()| és \verb|receiveMessages()| metódusokkal lehet küldeni, illetve fogadni üzeneteket.
+
+Annak biztosításához, hogy egy üzenet se vesszen el, az osztályban üzenetsort (\verb|messageQueue|) használok az üzenetek fogadására, amelyben pontosan olyan sorrendben vannak elhelyezve az üzenetek, ahogyan a szerver küldte. Az osztályban definiálva van egy \verb|DEBUG_MODE| konstans, melynek igazra állításával a kliens minden hálózati tevékenységet (például küldött, fogadott üzeneteket) a konzolra ír. A \verb|MESSAGE_BUFFER_SIZE| konstanssal pedig az üzenetek pufferméretét lehet állítani, azaz, hogy egy adott TCP csomagban mekkora legyen az üzenet mérete.
+
+\subsubsection{A run metódus}
+
+Az osztály \verb|run()| metódusa a kliensprogram futtatását végzi egy külön szálon, garantálva a párhuzamos futást. Az üzenetek fogadása egy blokkoló művelet, azaz csak akkor lép tovább, ha az üzenetet fogadott. Ahhoz, hogy a játékmotor megfelelően tudjon futni, miközben a kliens fogadja a beérkező üzeneteket a szervertől, a két folyamatot egymással párhuzamosan kell futtatni. Így el tudom kerülni, hogy maga a játék is blokkolódjon.
+
+A metódusban egy ciklus található, amely egészen addig fut, amíg a \verb|connected| adattag igaz értékű. A ciklusmagban fogadom az üzeneteket a \verb|receiveMessages()| metódussal 100 milliszekundumos időtúllépéssel. Ez azt jelenti, hogy a fogadási művelet maximum csak a megadott időtúllépésig blokkol, majd továbblép, így elkerülhető, hogy a folyamat ''beragadjon'', ha már bontásra került a szerverrel való kapcsolat. Ezután egy másik ciklus következik, amely az üzenetsor kiürüléséig ismétlődik. Itt a beérkezett üzeneteket egyesével lekezelem a \verb|handleMessage()| metódus segítségével.
+
+\subsubsection{A sendMessage metódus}
+
+A \verb|sendMessage()| metódussal üzenetek küldhetők a szerver felé. Paraméterként az elküldeni kívánt üzenetet fogja kapni, amely \verb|string| típusú. A küldés előtt az üzenet végéhez hozzáfűz egy pontosvesszőt. Ez fogja jelezni a szerver számára az üzenet végét. A metódus ellenőrzi, hogy sikeres volt-e a küldés, ellenkező esetben kiírja a hiba nevét és okát a konzolra (\verb|SDLNet_TCP_Send()|).
+
+\subsubsection{A receiveMessages metódus}
+
+A \verb|receiveMessages()| metódus használatával a szerver által küldött üzeneteket lehet fogadni. Paraméterként megadható az időtúllépés mértéke milliszekundumokban (\verb|timeout|), ezáltal az üzenetek fogadásához tartozó művelet (\verb|SDLNet_TCP_Recv()|) legfeljebb a megadott ideig fog blokkolni. Ha az időtúllépés értéke 0, akkor a fogadás mindig a következő üzenet beérkezéséig blokkol.
+
+Fogadáskor megállapításra kerül az üzenet hossza (\verb|length|). Ha az üzenet hossza nem pozitív, akkor az azt jelenti, hogy a szerverrel való kapcsolat megszakadt és bontani kell vele a kapcsolatot (\verb|disconnectFromServer()|). Ellenkező esetben a fogadás sikeresnek tekinthető. Sikeres fogadás esetén az üzenetet rövidebb üzenetekre darabolom fel a pontosvesszők mentén, majd ezeket a beérkezési sorrendben egy üzenetsorba helyezem.
+
+\subsubsection{A popMessage metódus}
+
+A \verb|popMessage()| metódussal az elsőként megkapott üzenetet lehet levenni az üzenetsorról. A metódus működése azonos a sor adatszerkezet \verb|pop()| műveletével, amely eltávolítja, majd visszaadja a sor soron következő elemét.
+
+\subsubsection{Az init metódus}
+
+A \verb|Client| osztály \verb|init()| metódusával a többjátékos módhoz szükséges adattagokat inicializálom. Először fogadom a szervertől a pályaadatokat, amelyet base64-ben dekódolok, majd gzip-el kitömörítek. Ezután a kapott adatok alapján inicializálom a játékosokat tartalmazó JSON objektumot, majd frissítem a játékosok pontszámait. Végül eltárolom a játékos azonosítószámát, amely alapján később azonosítani lehet a játékost (\verb|playerId|).
+
+\subsubsection{A pushChatMessage metódus}
+
+A \verb|pushChatMessage()| metódus segítségével egy paraméterként megadott szöveggel rendelkező üzenet írható a többjátékos módban megjelenő chat ablakba. Egy \verb|(std::string, int)| párt helyez a \verb|chatMessages| vektorba, amely a chat ablakban megjelenő üzeneteket tárolja. A pár első eleme az üzenet szövege, a második pedig a lejárati ideje. A lejárati idő a fogadástól számított 5 másodperc, így az ennél régebben küldött üzenetek már nem fognak megjelenni a chat ablakban.
+
+\subsubsection{A handleMessage metódus}
+
+A \verb|Client| osztály \verb|handleMessage()| metódusában a kliens által fogadott üzenetek kezelését végzem. A szerverprogramhoz hasonlóan, az üzenetek itt is rendelkeznek egy \verb|action| kulccsal, amely meghatározza a végezni kívánt műveletet (például \verb|join-game|, vagy \verb|pick-up-item|).
+
+\subsubsection{A loadOpponents metódus}
+
+A \verb|loadOpponents()| metódusban a többjátékos módban megjelenő többi játékos, azaz az ellenfelek pályára való betöltését végzem. Egy for ciklussal végigmegyek a szerver által küldött játékosok adatain (\verb|players|), majd a \verb|Map| osztály \verb|addOpponent()| metódusának használatával létrehozom őket a pályán.
+
+\subsubsection{A sendPlayerPosition metódus}
+
+A \verb|sendPlayerPosition()| metódussal elküldöm a kliens által kezelt játékos koordinátáit (\verb|position|) és irányát (\verb|angle|) a szervernek, amelyet az továbbít a többi kliens felé. Ez csak abban az esetben történik, ha a játékos helyzete változott az előző helyzetéhez képest. Ellenkező esetben nem kerülnek elküldésre az adatok.
+
+\newpage
+
+\subsection{Az Editor osztály}
+
+Az \verb|Editor| osztályban a pályaszerkesztő funkciók működését implementáltam. A konstruktora paraméterként megkapja a \verb|DrawUtils| segédosztály egy példányát, majd inicializálok minden, a használathoz szükséges adattagot. Mivel az osztály egy különálló szoftverkomponens, ezért az eseményeket is külön kezeli.
+
+\subsubsection{A run metódus}
+
+Az osztály \verb|run()| metódusában egy ciklus található, amely egészen addig ismétlődik, amíg a pályaszerkesztő futtatása során valamilyen esemény kilépést nem vált ki. A ciklusmagban vannak a pálya és a felhasználói felület kirajzolásához tartozó (\verb|drawMap()|, \verb|drawGui()|), valamint az eseménykezelést végző metódusok (\verb|handleEvents()|, \verb|handleMouse()|). Továbbá tartalmaz egy \verb|switch| esetszétválasztást, amely a \verb|handleEvents()| által megkapott esemény száma alapján valamilyen műveletet hajt végre. Ezen események a következők lehetnek:
+
+\begin{itemize}
+	\item 1: új pálya létrehozása
+	\item 2: labirintus generálása a megadott paraméterek alapján
+	\item 3: pálya megnyitása
+	\item 4: pálya mentése
+	\item 5: kilépés
+\end{itemize}
+
+A pálya mentése esetén leellenőrzöm, hogy a pálya tartalmaz-e bejáratot (\verb|start|), illetve kijáratot (\verb|finish|), melyek megléte nélkül a program nem engedi elmenteni a pályát. Ennek ellenőrzése úgy történik, hogy a program megvizsgálja a \verb|start| és \verb|finish| blokkokra mutató pointereket és ha valamelyik nullpointer, akkor a \verb|saveMap()| metódus meghívása helyett egy hibaüzenetet jelenik meg.
+
+A pályaszerkesztővel szerkesztett pályák blokkokból épülnek fel, minden ilyen blokknak van egy típusa (\verb|type|), koordinátái (\verb|x|, \verb|y|, \verb|z|), valamint egy iránya (\verb|angle|). A pálya mentésekor a blokkok adatait tartalmazó rekordokat kiírom egy \verb|map| kiterjesztésű pályafájlba, amelyet a játékmotor, vagy a szerverprogram később be tud tölteni. Azt a struktúrát, ami egy blokkot reprezentál, a következőképpen definiálom:
+
+\begin{lstlisting}[language={C++},caption={A Block struktúra}]
+struct Block {
+	std::string type;
+	float x, y, z, angle;
+
+	Block(const std::string& type, float x, float y, float z, float angle) {
+		...
+	}
+};
+\end{lstlisting}
+
+\subsubsection{A drawBlockTo metódus}
+
+Az \verb|Editor| osztály \verb|drawBlockTo()| metódusával a paraméterként megadott pozícióra (\verb|x|, \verb|y|) rajzolom a megadott típusú blokk textúráját. A falak textúráját mindig a kiválasztott faltextúra (\verb|selectedTileTexture|) szerint választom ki. A \verb|Start| mező esetén egy narancssárga nyilat rajzolok, amely abba az irányba mutat, ahova a játékos alapértelmezetten néz a játék indulásakor.
+
+\subsubsection{A transformMapPosition metódus}
+
+A \verb|transformMapPosition()| metódussal egy blokk relatív koordinátái alakíthatók át a kamerapozíció (\verb|cameraX|, \verb|cameraY|) figyelembevételével abszolút koordinátákká. Ezzel meghatározható, hogy a képernyő pontosan mely részére kell kirajzolni egy adott blokkot.
+
+\subsubsection{A drawMap metódus}
+
+A \verb|drawMap()| metódusban a pályaszerkesztővel készített kétdimenziós pályát rajzolom a képernyőre. Egy for ciklussal végigiterálok a pályát felépítő blokkokon. A ciklusmagban először a \verb|transformMapPosition()| metódus alkalmazásával előállítom a blokk relatív koordinátáit a kamerapozícióhoz képest, ezután a \verb|drawBlockTo()| metódusnak paraméterként adva a blokk pozícióját (\verb|position|), típusát (\verb|type|) és irányát (\verb|angle|) a képernyőre rajzolom. A kirajzoláskor mindig csak a kamera által látható blokkokat rajzolom ki. Így nem okoz lassulást a nagy méretű pályák blokkjainak kirajzolása.
+
+\newpage
+
+\subsection{A Mesh osztály}
+
+A \verb|Mesh| osztály egy modellt (poligonhálót) reprezentál, amely egy vagy több entitáshoz kerül hozzárendelésre. Az entitás modelljével tulajdonképpen azt adom meg, hogy hogyan fog megjelenni a háromdimenziós térben.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=1\textwidth]{blender.png}
+	\caption{Egy jármű poligonhálója szerkesztés közben}
+\end{figure}
+
+Általában egy szekvenciális inputfájlból töltöm be a poligonhálót a \verb|loadOBJ()| metódus segítségével, de lehetőség van a programon belül is létrehozni az \verb|addVertex()|, illetve az \verb|addIndex()| metódusok megfelelő alkalmazásával. Az osztály csúcs struktúrákat (Vertex), indexeket, valamint egy textúrát tárol. Egy ilyen Vertex struktúra a következőképpen néz ki:
+
+\begin{lstlisting}[language={C++},caption={A Vertex struktúra},xleftmargin=.3\textwidth]
+struct Vertex {
+	glm::vec3 position;
+	glm::vec3 normal;
+	glm::vec2 texCoord;
+};
+\end{lstlisting}
+
+\subsubsection{Az init metódus}
+
+Az osztály \verb|init()| metódusával inicializálódik az osztályban tárolt Vertex Array Object (VAO), Vertex Buffer Object (VBO) és az indexpuffer, miután létrejöttek a csúcsok, illetve az indexek. Az OpenGL a VAO-ból fogja a képernyőre rajzolni a poligonhálót a \verb|glDrawElements()| procedúra meghívásával. A VAO, VBO és indexpuffer inicializálása a következő lépésekből áll:
+
+\begin{enumerate}
+	\item VAO, VBO, indexpuffer generálása, memóriaterületének allokálása és neveik eltárolása az \verb|m_vaoID|, \verb|m_vboID|, \verb|m_ibID| változókban (\verb|glGenBuffers()|)
+	\item Az \verb|m_vaoID|, \verb|m_vboID| nevű VAO és VBO csatlakoztatása (\verb|glBindVertexArray()|, \verb|glBindBuffer()|)
+	\item A \verb|vertices| vektor által tárolt \verb|Vertex| típusú rekordok másolása a VBO-ba (\verb|glBufferData()|)
+	\item A 0-ás indexű attribútum használatának engedélyezése a VAO-ban (\verb|glEnableVertexAttribArray()|)
+	\item A koordináták (\verb|position|) a VAO 0-ás indexű attribútumába kerülnek (\verb|glVertexAttribPointer()|)
+	\item A 1-es indexű attribútum használatának engedélyezése a VAO-ban (\verb|glEnableVertexAttribArray()|)
+	\item A normálvektorok (normálok) a VAO 1-es indexű attribútumába kerülnek \verb|glm::vec3|-al eltolva (\verb|glVertexAttribPointer()|)
+	\item A 2-es indexű attribútum használatának engedélyezése a VAO-ban (\verb|glEnableVertexAttribArray()|)
+	\item A textúrakoordináták a VAO 2-es indexű attribútumába kerülnek, (\verb|2 * glm::vec3|)-al eltolva (\verb|glVertexAttribPointer()|)
+	\item Az \verb|m_ibID| nevű indexpuffer csatlakoztatása (\verb|glBindBuffer()|)
+	\item Az \verb|indices| vektor által tárolt \verb|GLuint| típusú indexek betöltése az indexpufferbe (\verb|glBufferData()|)
+	\item VAO, VBO, indexpuffer lecsatlakoztatása (\verb|glBind| előtagú hívások, 0-ás paraméterrel)
+\end{enumerate}
+
+\subsubsection{Egy poligonháló kirajzolása}
+
+A poligonhálók kirajzolását a \verb|Game| osztály \verb|drawMesh()| metódusával végzem perspektivikus vetítés esetén. A metódus paraméterként megkapja a kirajzolni kívánt modell memóriacímét (\verb|Mesh*|), koordinátáit (\verb|position|), valamint a használni kívánt shader azonosítóját (\verb|m_loc|). A kirajzolás a következő lépésekből áll:
+
+\begin{enumerate}
+	\item Kiszámítom a modellmátrixot (\verb|model|) a transzformációk (mozgatás, forgatás) alkalmazásával, majd veszem ennek inverzét és transzponáltját (\verb|modelIT|).
+	\item Előállítom az MVP (Model View Projection) mátrixot a projekciós- (\verb|projection|), nézet- (\verb|view|) és a modellmátrixok (\verb|model|) szorzataként.
+	\item Uniform változóként betöltöm a shaderbe a 3 mátrixot (\verb|model|, \verb|modelIT|, \verb|MVP|), valamint a játékos pozícióját (\verb|playerPos|) és a renderelési távolság mértékét (\verb|renderDistance|).
+	\item Lekérdezem a poligonháló textúráját az objektum \verb|getTexture()| metódusával, majd ezt is betöltöm a shaderbe uniform változóként.
+	\item Csatlakoztatom (bindolom) a poligonháló VAO-ját (Vertex Array Object) a \verb|glBindVertexArray()| hívással.
+	\item Végül a képernyőre rajzolom a poligonhálót a \verb|glDrawElements()| használatával.
+\end{enumerate}
+
+Egy indexszel mindig egy adott csúcsra lehet hivatkozni, így a csúcsok indexelhetők. Ez azért hasznos, mert nem szükséges többször ugyanazt a csúcsot definiálni egy poligonháló létrehozásakor, elég egy már korábban létrehozott csúcsra hivatkozni. Emellett segítségükkel megadható a csúcsok kirajzolási sorrendje. Fontos tudni, OpenGL-ben csúcsok kirajzolását az óramutató járásával ellentétes irányban kell végezni, hogy előrefelé néző arcelemeket (\verb|faces|) lehessen kapni.
+
+\subsubsection{A loadOBJ metódus}
+
+A metódus alkalmazásával poligonhálót lehet betölteni fájlból a paraméterként megadott elérési útvonalról. A fájl \verb|obj| kiterjesztésű, amely a Wavefront OBJ \cite{wavefrontobj} szabványának megfelelő, de kiegészítésként tartalmazza a használni kívánt textúra elérési útvonalát is. Erre a \verb|texture| kulcsszóval hivatkozom.
+
+A fájl egy adott sora a következő paramétereket tartalmazhatja:
+
+\begin{itemize}
+	\item \verb|v|: csúcs koordinátái (x, y, z)
+	\item \verb|vn|: normálvektor koordinátái (x, y, z)
+	\item \verb|vt|: textúrakoordináták (u, v)
+	\item \verb|f|: arcelem (csúcsindex1/textúraindex1/normálindex1 ...)
+	\item \verb|texture|: textúra elérési útvonala
+\end{itemize}
+
+Az arcelemek (faces) tulajdonképpen a modellt alkotó lapocskák. Minden ilyen kis lapnak egy 3-nál több szögű sokszögnek kell lennie ahhoz, hogy ki lehessen rajzolni egy síkként a háromdimenziós térben. A játékmotor erre a célra háromszögeket alkalmaz, így három index-hármasnak kell szerepelnie egy arcelem meghatározásához.
+
+Minden más kulcsszóval kezdődő sor ignorálásra kerül beolvasáskor, azaz lehetőség van kommentek írására is, a \# karakter kiírásával.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=1\textwidth]{cube.png}
+	\caption{Egy kocka lapjainak normálvektorai}
+\end{figure}
+
+\subsection{A Dimension struktúra}
+
+A \verb|mesh.h| fájlban definiált \verb|Dimension| struktúra egy adott poligonháló kiterjedését tárolja. Betöltéskor a \verb|loadOBJ()| metódus meghatározza a poligonháló szélességét (\verb|width|), magasságát (\verb|height|), mélységét (\verb|depth|), amelyeket ebben a struktúrában eltárol. A \verb|Mesh| osztály rendelkezik egy \verb|getDimensions()| metódussal, amellyel lekérhető annak kiterjedése. Erre általában az ütközésvizsgálat esetén van szükség, amikor ismerni kell a modellek méreteit, így meghatározható, hogy egy adott entitáshoz tartozó poligonháló mikor ütközött például fallal.
+
+\subsection{A Maze osztály}
+
+A \verb|Maze| osztály a labirintusgenerálásért felelős. Mind a játékprogram és a szerverprogram ugyanazt az implementációt használja. Segítségével tetszőleges méretű labirintusok generálhatók a bejárat, illetve a kijárat koordinátáinak megadásával. A labirintus reprezentációjának tárolására egy n$\times$m-es mátrixot használok, amely cellákra mutató pointereket tartalmaz (\verb|Cell*|). A mátrix mérete mindig a példányosításkor megadott szélesség és magasság paraméterektől függ. A konstruktor a mátrix inicializálása után meghívja a \verb|randomizeDfs()| metódust, amely elindítja a labirintusgenerálási folyamatot.
+
+\subsubsection{A Cell osztály}
+
+A labirintust felépítő cellákat a \verb|Cell| osztállyal reprezentálom. Adattagjaiban a következő értékeket tárolom:
+
+\begin{itemize}
+	\item \verb|x, y|: a cella kétdimenziós pozíciója
+	\item \verb|type|: a cella típusa
+	\begin{itemize}
+		\item \verb|0|: közönséges cella
+		\item \verb|1|: kijárat
+		\item \verb|2|: bejárat
+		\item \verb|3|: tárgyat tartalmazó cella
+		\item \verb|4|: NPC-t tartalmazó cella
+	\end{itemize}
+	\item \verb|visited|: a cellát látogatottként jelölte meg az algoritmus
+	\item \verb|topWall|, \verb|bottomWall|, \verb|leftWall|, \verb|rightWall|: a cellát körülvevő falak állapota
+	\begin{itemize}
+		\item igaz érték esetén létezik, ellenkező esetben nem létezik a fal
+	\end{itemize}
+	\item \verb|finishPath|: a cella eleme a kijárathoz vezető útvonalnak
+\end{itemize}
+
+\subsubsection{Az algoritmus}
+
+A labirintusgenerálási algoritmus a mélységi bejáráson (depth-first search) alapul, amely egy gráfelméleti keresőalgoritmus. A mélységi keresés egy változatát a 19. században a francia matematikus, Charles Pierre Trémaux a labirintusok megoldásának stratégiájaként vizsgálta meg \cite{dfs}, tőle származik az alapelve. Az algoritmus alapvetően rekurzív, de megvalósítható iteratív módon is. Én az utóbbi módon implementálom. Rekurzió esetén ugyanis a végrehajtási verem mérete korlátozott és az algoritmus egy bizonyos mélység után leáll, ami hibát eredményez (stack overflow). Ennek a problémának a kiküszöbölésére iteratívan kell megírni az algoritmust, úgy, hogy a végrehajtási verem egy verem adatszerkezettel van helyettesítve (\verb|std::stack|). Ennek a veremnek már jóval nagyobb a kapacitása, így nem kell arra számítani, hogy az algoritmus például egy 100$\times$100-as labirintus generálása esetén leáll. Az algoritmus implementációját a 3.4.1 pontban található struktogram mutatja be.
+
+Első lépésként kiválasztom a paraméterek alapján (\verb|startX|, \verb|startY|) a kezdőcellát (\verb|initialCell|), majd megjelölöm látogatottként és bejáratként. Ezután berakom egy verembe, majd elindul egy ciklus, amely a verem kiürüléséig fog ismétlődni.
+
+A ciklus először kiveszi a veremből az aktuális cellát (\verb|currentCell|). Ezután eldönti, hogy kell-e tárgyat elhelyezni a cellában. Ha a cella nem bejárat, akkor 1/10-ed esélye van annak, hogy a cellába valamilyen tárgy, vagy NPC kerül. Így megoldható, hogy a labirintusban ritkán és szétszórtan jelenjenek meg különböző tárgyak és NPC-k. Következő lépésként egy vektorba gyűjti azon cellaszomszédokat, amelyeket még nem látogatott meg a \verb|getUnvisitedNeighbors()| metódus használatával. Ha a vektor nem üres, azaz vannak ilyen szomszédok, akkor véletlenszerűen választ közülük egyet, amelyet szintén látogatottként jelöl meg. Ezután eltávolítja a kiválasztott és az aktuális cella közötti falat a \verb|removeWallBetween()| metódussal, majd mindkét cellát a verembe helyezi.
+
+Miután a ciklus lefutott, meghívásra kerül a \verb|backtrackIter()| metódus a (\verb|startX|, \verb|startY|, \verb|endX|, \verb|endY|) paraméterekkel, amely a bejárat és a kijárat közötti utat fogja legenerálni a labirintusban. Az algoritmus a mélységi bejáráson alapuló visszalépéses keresés (backtracking) \cite{backtracking} módszerét alkalmazza (3.4.2 pont).
+
+\subsubsection{A generateEntities metódus}
+
+A \verb|generateEntities()| metódussal a labirintust tároló mátrix (\verb|mazeCells|) cellái alapján entitások listáját lehet generálni, amely később elmenthető, vagy a klienseknek továbbítható. Ezen listát nem csak a cellák által tárolt elemek alapján építi fel, hanem a cellákat körülvevő falakat (felső, alsó, bal, jobb) is figyelembe veszi.
+
+\subsubsection{A save metódus}
+
+Az osztály \verb|save()| metódusával a paraméterként megadott fájlnévvel elmenthető a generált labirintus. A fájlba az entitások listája kerül, amely soronként tartalmazni fogja az adott entitás típusát, pozícióját, illetve irányát.
+
+\subsubsection{A getData metódus}
+
+A \verb|Maze| osztály \verb|getData()| metódusával a generált labirintus reprezentációját lehet lekérni \verb|std::stringstream|-ben, amely az entitások listáját fogja tartalmazni. Ezen a listán iterál végig a \verb|Map| osztály \verb|loadEntities()|, illetve az \verb|Editor| osztály \verb|loadMap()| metódusa, amikor betöltődnek a pálya adatai.
+
+\subsubsection{A getSolutionPath metódus}
+
+A \verb|getSolutionPath()| metódussal az eltárolt, megoldáshoz vezető útvonalat lehet lekérni \verb|std::list| listában. Az útvonal elemei olyan \verb|(x,y)| párok, amelyek a kezdőcellától kezdve a kijáratig tartalmazzák az útvonalhoz tartozó cellák koordinátáit egymást követő sorrendben. Az algoritmus a \verb|backtrackIter()| futása során megoldásként megjelölt cellái közül elhelyezi listában a megfelelő cellákat. Ügyel arra, hogy mindig csak azon koordináták kerüljenek be a listába, ahol a játékosnak irányt kell változtatnia (például a sarkokon).
+
+\subsubsection{Az isWallBetween metódus}
+
+Az \verb|isWallBetween()| metódus a paraméterként megadott két celláról eldönti, hogy van-e köztük fal, amely elválasztja őket. Legalább egy ilyen létező fal esetén igaz, ellenkező esetben hamis értékkel tér vissza.
+
+\subsubsection{A getUnvisitedNeighbors metódus}
+
+A \verb|getUnvisitedNeighbors()| metódus az olyan cellaszomszédokat határozza meg a paraméterként megadott cellára, amelyeket az algoritmus korábban még nem látogatott meg, azaz a \verb|visited| adattagjuk hamis volt. Visszatérési értéke egy cellákra mutató pointereket tartalmazó vektor (\verb|std::vector<Cell*>|).
+
+\subsubsection{A getUnvisitedAccessibleNeighbors metódus}
+
+A \verb|getUnvisitedAccessibleNeighbors()| metódus az olyan cellaszomszédokat határozza meg a paraméterként megadott cellára, amelyek még korábban nem voltak meglátogatva, valamint a megadott cellából elérhetőek, azaz nincs köztük fal, amely elválasztja őket. Visszatérési értéke egy cellákra mutató pointereket tartalmazó vektor (\verb|std::vector<Cell*>|).
+
+\subsubsection{A putItem és putNPC metódusok}
+
+A \verb|putItem()| metódussal egy tárgyat, a \verb|putNPC()| metódus használatával pedig egy NPC-t lehet elhelyezni a paraméterként megadott cellában. A \verb|putNPC()| metódusban ellenőrzöm az elhelyezett NPC-k számát és csak akkor helyezek el egy újabbat, ha a számuk (\verb|totalNPCs|) nem haladja meg a \verb|MAX_NPC_COUNT| konstans által definiált korlátot.
+
+\subsection{A Texture osztály}
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=50mm]{texture.png}
+	\caption{A Texture osztály osztálydiagramja}
+\end{figure}
+
+A \verb|Texture| osztály különböző felületek, illetve poligonhálók által használt textúrákat reprezentálja, amely tulajdonképpen egy csomagoló (wrapper) osztály. Konstruktorának paraméterként a tárolni kívánt textúrát adom (\verb|GLuint|), majd OpenGL-es hívásokkal lekérdezem a szélességét és a magasságát, amit az adattagjaiban eltárolok. Így később egy-egy egyszerű getter metódussal lekérhetők a textúra méretei. A tárolt textúra pedig a \verb|getData()| segítségével kérhető le.
+
+\subsection{A Window osztály}
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=40mm]{window.png}
+	\caption{A Window osztály osztálydiagramja}
+\end{figure}
+
+A \verb|Window| osztály a játékmotor programablakát reprezentálja, illetve vezérli a megfelelő metódusok segítségével. Példányosításkor létrehozza az SDL-es programablakot (\verb|SDL_Window*|) a megfelelő paraméterekkel, valamint az inicializálja OpenGL működéséhez szükséges környezetet (\verb|SDL_GLContext|).
+
+\subsubsection{Az updateMapFrame metódus}
+
+Az \verb|updateMapFrame()| metódus a képkockafrissítést végzi perspektivikus vetítés esetén (\verb|glm::perspective|), azaz a háromdimenziós pálya kirajzolásakor. A kamera pozíciójától és beállításaitól függően beállítom a nézetmátrixot (\verb|view|) a \verb|glm::lookAt()| alkalmazásával. Ha a kamera 0-ás módban van belső nézetes (FPS), ha pedig 1-es módban van, akkor pedig hátulnézetes (TPS) megjelenítés kapható.
+
+\subsubsection{Az updateMenuFrame metódus}
+
+Az \verb|updateMapFrame()| metódus szintén képkockafrissítést végez, azonban ortografikus vetítés esetén, például a menüben, ahol nincs szükség háromdimenziós megjelenítésre. Ilyenkor hagyományos kétdimenziós felületeket rajzolok ki a képernyőre.
+
+\subsection{A Button osztály}
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=40mm]{button.png}
+	\caption{A Button osztály osztálydiagramja}
+\end{figure}
+
+A \verb|Button| osztály a felhasználói felületen (GUI) megjelenő gombokat reprezentálja. Ilyen gombok a játékmenüben jelennek meg, de tetszés szerint bárhol elhelyezhetők a játékban.
+Konstruktora megkapja a gombon megjeleníteni kívánt szöveget (\verb|text|), a gomb pozícióját (\verb|x|, \verb|y|), méretét (\verb|scale|), illetve a szöveg bittérképes betűkészletét (\verb|fonts|). Ezután a \verb|renderText()| metódussal legenerál egy textúrát (\verb|Texture*|), amit adattagként eltárol és egy getter metódussal lekérhető. Ezzel a textúrával rajzolom ki a gombot.
+
+\subsection{A Menu osztály}
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=50mm]{menuclass.png}
+	\caption{A Menu osztály osztálydiagramja}
+\end{figure}
+
+A \verb|Menu| osztály a játék főmenüjét reprezentálja. Listákban tárolja a főmenü különböző részein megjelenő gombokat (\verb|buttonGroup1|, \verb|buttonGroup2|), amelyek gombokra mutató pointereket tartalmaznak (\verb|Button*|). Konstruktorában feltölti a listákat ezekkel a gombokkal, mindegyiknek egyenként megadhatók a paraméterei, például a szövege, vagy a pozíciója.
+
+\subsection{Főprogram (main.cpp)}
+
+A \verb|main.cpp| fájlban található a program fő belépési pontja, a \verb|main()| függvény. Itt lényegében csak példányosításra kerül a játékmotort reprezentáló \verb|Game| osztály, majd meghívódik a \verb|run()| metódusa a futtatáshoz. Ezzel elindul a játékmotor, ami egészen addig fut, amíg valamilyen esemény kilépést nem vált ki, azaz a \verb|quit| adattag igaz értéket nem vesz fel. Ekkor a \verb|run()| metódus leáll, továbblép, majd 0-val tér vissza, jelezve az operációs rendszernek a sikeres lefutást.
+
+\newpage
+
+\subsection{Segédfüggvények (drawutils.h)}
+
+A \verb|drawutils.h| fájl a \verb|DrawUtils| segédosztályt tartalmazza, valamint olyan általános segédfüggvényeket deklarál, amelyek a játékmotorban lényegében bárhol felhasználhatók. Ezen metódusok, illetve függvények implementációja a \verb|drawutils.cpp| fájlban található, működésük az alábbi táblázatban van kifejtve:
+
+\begin{table}[H]
+	\centering
+	\begin{tabular}{ | m{0.35\textwidth} | m{0.55\textwidth} | }
+		\hline
+		\textbf{Név} & \textbf{Leírás} \\
+		\hline \hline
+		\emph{drawTexture2D} & Kétdimenziós textúrát rajzol a képernyőre a megadott paraméterekkel (textúra, pozíció (x, y), skálázás (scale), méretek (width, height)) \\
+		\hline
+		\emph{drawRectangle} & Kétdimenziós téglalapot rajzol a képernyőre a megadott paraméterekkel (szín, pozíció (x, y), méretek (width, height)) \\
+		\hline
+		\emph{drawBackground2D} & Háttérképet rajzol ismétlődő mintázattal a paraméterként megadott textúrával \\
+		\hline
+		\emph{drawText} & Szöveget rajzol a képernyőre a megadott paraméterekkel (pozíció (x, y), skálázás (scale)) \\
+		\hline
+		\emph{drawTextInput} & Szövegbeviteli mezőt rajzol a megadott paraméterekkel (üzenet, begépelt szöveg) \\
+		\hline
+		\emph{drawButtonGroup} & A paraméterként megadott gombok listáját rajzolja ki egyszerre a képernyőre \\
+		\hline
+		\emph{loadImage} & A paraméterként megadott képfájlt betölti egy \verb|SDL_Surface*| felületre \\
+		\hline
+		\emph{createTextureFromSurface} & A paraméterként megadott \verb|SDL_Surface*| típusú felületet textúrává alakítja \\
+		\hline
+		\emph{createTextureFromImage} & A paraméterként megadott képfájlt beolvassa és textúrává alakítja \\
+		\hline
+		\emph{renderText} & A megadott szövegű és betűtípusú szöveget textúrába rendereli (ennek működése a következő alfejezetben van részletezve) \\
+		\hline
+	\end{tabular}
+	\caption{A segédfüggvények és metódusok leírása}
+	\label{tab:example-1}
+\end{table}
+
+\subsubsection{A renderText segédfüggvény}
+
+A \verb|renderText()| segédfüggvénnyel a megadott betűkészletű szöveget textúrába renderelem (rajzolom). Több képfájlból álló bittérképes betűkészletet alkalmazok, amely a játékban használt összes karaktert tartalmazza. Jelenleg az angol abc kis- és nagybetűit (a-Z), a számjegyeket (0-9), valamint az egyéb speciális karaktereket (felkiáltójel, pont, alulvonás stb.) használom. Mindegyik kategóriát külön képfájlban kell tárolni, erre egy példa a 3.9. ábrán látható.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=1\textwidth]{lowercase.png}
+	\caption{A kisbetűs betűtípust tartalmazó képfájl}
+\end{figure}
+
+Első lépésként létrehozok egy üres felületet. Ezután egy for ciklussal végigiterálok a megadott szövegen, majd a soron következő karakternek megfelelő képet a felületre másolom. Számok és betűk esetén a karakter ASCII kódja határozza meg, hogy honnan, milyen pozícióról kell a képet lemásolni.
+
+Második lépésként létrehozok egy újabb üres felületet, amelyre a végeredmény fog kerülni. Ennek szélessége az előző lépésben kirajzolt szöveg szélességétől függ. Ezzel lényegében ''levágásra'' kerül a fel nem használt terület, úgy, hogy csak a szükséges rész, azaz a szöveg maradjon meg. Ezt követően egy textúrát készítek a felületből a \verb|createTextureFromSurface()| segédfüggvényt alkalmazva.
+
+\newpage
+
+\section{A szerverprogram (maze-server)}
+
+A szerverprogram fogadja és kezeli a többjátékos módhoz csatlakozó játékosokat (klienseket). Mivel több klienst kell egyszerre párhuzamosan kiszolgálni, ezért a program több szálon fut és minden egyes klienst egy-egy szál (worker) szolgál ki. A szerver a kommunikáció során szövegalapú, JSON \cite{json} formátumot használ. A program egy konzolos alkalmazás, így nem rendelkezik saját grafikus felülettel (GUI), hanem induláskor egy konzolablak jelenik meg, ahonnan parancsokkal közvetlenül vezérelhető a működése.
+
+\subsection{A Server osztály}
+
+A \verb|Server| osztály a szerverprogram fő részét képezi. Itt fogadom a klienseket, valamint a különböző üzeneteket is innen küldöm. Amikor példányosítom, megnyitok egy TCP alapú socketet a konfigurációs fájlban megadott portszámon. Ha minden hívás hibamentesen lefutott, akkor legenerálásra kerül egy új labirintus a \verb|generateMap()| metódussal, amit a játékosok fognak megkapni, amikor csatlakoznak.
+
+Miután az osztályt példányosítottam, meghívom a \verb|start()| metódusát, amellyel meghívódik a \verb|run()| metódusa, ezzel elindul a szerverprogram fő ciklusa egy külön szálon. Ez a ciklus egészen addig fut, amíg a szervert le nem állították, vagyis a \verb|stop| adattag igaz értéket nem vesz fel. A ciklus az üzenetsoron lévő üzenetek kiküldését végzi (\verb|handleMessageQueue()|), illetve fogadja az újonnan bejövő klienseket (\verb|acceptConnection()|).
+
+Ha sikeresen létrejött a klienssel való kapcsolat, akkor a \verb|ServerThread| osztály példányosításával létrejön egy új szál, amin keresztül a klienssel lehet kommunikálni. Az osztály konstruktora paraméterként megkapja a \verb|Server| objektumra mutató pointert, a fogadáskor létrejött socketet, valamint egy véletlenszerűen generált UUID-t, ami alapján azonosítható a kliens. Az UUID (Universally Unique IDentifier) egy olyan véletlenszerűen generált hexadecimális formátumú azonosító, amely minden esetben egyedi lesz. Emellett ahhoz a \verb|serverThreads| listához adom hozzá, amelyben számon vannak tartva a létrehozott szálak.
+
+\subsubsection{Üzenetküldés}
+
+A \verb|broadcast| előtagú metódusok használatával különféle üzeneteket lehet küldeni (közvetíteni) az összes, szerverhez csatlakozó kliens felé. Minden ilyen üzenet tartalmazza a végezni kívánt műveletet (\verb|action|) és a kapcsolódó paramétereket. Üzenetküldéskor az üzenet mindig egy üzenetsorba kerül.
+
+Mivel ezt az üzenetsort egyszerre több szál is írhatja, ezért azt szálbiztossá kell tenni, azaz kölcsönös kizárást kell alkalmazni, hogy egy időben csak egy szál tudja írni. Ennek megvalósításához mutexet (\verb|std::mutex|) használok. A mutex lényegében egy bináris szemafor, amely szabad jelzés esetén csak egy szálat enged tovább, a többit pedig blokkolja, amíg a továbbengedett szál nem végez és fel nem oldja a zárat.
+
+\subsubsection{A setPlayerPosition metódus}
+
+A \verb|setPlayerPosition()| metódussal a paraméterként megadott azonosítóval rendelkező játékos pozícióját lehet beállítani a pályán. Ezen metódus általában a játékos mozgása esetén kerül meghívásra. Mivel egyszerre több szál is mozgathatja a játékosokat és írhatja a játékosok koordinátáit tartalmazó objektumot, ezért itt is (hasonlóan az üzenetküldéshez) kölcsönös kizárást alkalmazok.
+
+\subsubsection{A checkCollision metódus}
+
+A \verb|checkCollision()| metódusban ütközésvizsgálatot végzek a paraméterként megadott azonosítóval (\verb|id|) rendelkező játékossal. Egy for ciklussal végigiterálok a pálya entitásain és ellenőrzöm, hogy a játékos pozíciója az entitás egy adott sugarú környezetében van-e. A vizsgálatkor figyelembe veszem az entitás típusát, amely alapján megállapítom, hogy milyen műveletet kell végezni ütközés esetén. Ilyen műveletek például, hogy valaki éppen elérte a célt, vagy felvett egy tárgyat. Ezen műveletekről mindig értesítem a többi játékos is, így például a célba érés esetén egy újonnan generált pályát kapnak a játékosok.
+
+\newpage
+
+\subsection{A ServerThread osztály}
+
+A \verb|ServerThread| osztály egy workert reprezentál, amely az adott klienssel való kommunikációt végzi. Az osztályt a \verb|CppThread| \cite{cppthread} absztrakt osztályból származtatom. Ennek segítségével az osztály példányosítása után a \verb|start()| metódusának meghívásával egy új szál (\verb|std::thread|) jön létre, amelyen elindul az osztály \verb|run()| metódusa. Ezen metódus egy while ciklust tartalmaz, amely egészen addig ismétlődik, amíg a \verb|stop| adattag igaz értéket nem vesz fel. A ciklus leállása után bontásra kerül a klienssel való kapcsolat, majd a szál kilép.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=40mm]{serverthread.png}
+	\caption{A ServerThread osztály osztálydiagramja}
+\end{figure}
+
+\subsubsection{A run metódus}
+
+Az osztály \verb|run()| metódusa a worker futtatását végzi, amely az általa kezelt klienst szolgálja ki. Először fogad a játékostól egy üzenetet, amely tartalmazza a nevét és az általa kiválasztott járművet, majd megnöveli a játékosok számlálóját 1-el és inicializálja a játékos paramétereit (név, jármű, pontszám, pozíció). Ezt követően a \verb|sendInitGame()| metódussal elküldi a játékosnak a szerver által generált azonosítószámát, a játékosok helyzetét, pontszámukat, valamint az aktuálisan betöltött pálya adatait \verb|gzip| \cite{gzip} tömörítéssel és \verb|base64| \cite{base64} kódolással. Ezután értesíti a többi játékost az új játékos csatlakozásáról a \verb|broadcastJoinGame()| meghívásával, majd elindít egy újabb ciklust. Ebben a ciklusban folyamatosan fogadja a kliens által küldött üzeneteket egy üzenetsorban, amelyeket a \verb|handleMessage()| metódussal a beérkezési sorrendben egymás után lekezel. Minden egyes üzenet tartalmaz egy \verb|action| kulcsot, amely meghatározza a kliens által végezni kívánt műveletet. Ezen művelet lekezelésre fog kerülni a \verb|handleMessage()| metódus által.
+
+\subsubsection{A handleMessage metódus}
+
+A \verb|handleMessage()| metódussal a kliens által küldött üzeneteket lehet értelmezni és kezelni. Ilyen üzenetek például a játékos mozgatása (\verb|move-player|), vagy a chat üzenet küldése (\verb|chat-message|). Általában minden beérkező műveletet továbbküldök a többi játékosnak valamely \verb|broadcast| előtagú metódus meghívásával, így a többiek is látják egy másik játékos mozgását, vagy az általa küldött chat üzeneteket.
+
+A mozgatás esetén működik egyfajta csalásmegelőzés is, azaz nincs megengedve, hogy 2 egységnél nagyobb távolságot lehessen megtenni az aktuális pozíciótól. Így megelőzhető, hogy valaki a pálya egyik végéből a másik végébe ''teleportáljon''.
+
+\subsubsection{Az init metódus}
+
+A \verb|ServerThread| osztály \verb|init()| metódusával az osztály által kezelt játékos paramétereit inicializálom fel a szerverprogramban. Első lépésként fogadom a kliens által küldött első üzenetet, amely tartalmazza a játékos nevét, valamint az általa választott jármű típusát. Ha a kliens nem küldi el az első üzenetét, akkor bontom vele a kapcsolatot. Ezután ellenőrzöm, hogy a szerveren létezik-e még szabad hely, azaz, hogy a szerverhez csatlakozott kliensek száma nem haladja-e meg a konfigurációs fájlban megadott maximális slotok számát (\verb|maxSlots|).
+
+Végül utolsó lépésként azt is ellenőrzöm, hogy a csatlakozni kívánó játékos neve nem egyezik-e meg valamelyik korábban csatlakozott játékos nevével. Ha a kliens minden validációnak megfelelt, akkor az általa kezelt játékos adatai hozzáadásra kerülnek a szerverprogram által kezelt játékosok listájához.
+
+\subsection{A Map osztály}
+
+A szerverprogram - a játékprogramhoz hasonlóan - szintén rendelkezik egy \verb|Map| osztállyal, amely az aktuálisan betöltött pályát reprezentálja és a pályán lévő entitásokat tárolja. Az osztály \verb|loadEntities()| metódusában a paraméterként megkapott \verb|stringstream|-en végigiterálva létrehozom a megfelelő típusú entitásokat. A \verb|setSkyboxTexture()| és \verb|setTileTexture()| metódusokkal beállítható a pályán használni kívánt skybox-, illetve faltextúra. Ezeket alapvetően véletlenszerűen állítom be a konstruktorban, amikor létrejön az osztálypéldány.
+
+\subsection{Az Entity osztály}
+
+Az \verb|Entity| absztrakt osztály a pályán elhelyezkedő entitásokat reprezentálja. Itt jóval egyszerűbb az implementációja, mint a kliensprogram esetén. Csak a használt entitástípusokat származtattam, amelyek az alapvető paraméterekkel (típusnév, pozíció, irány) rendelkeznek. Az entitások típusának megkülönböztetésére az ütközésvizsgálat miatt van szükség, így tudom eldönteni, hogy például a játékos a célba ért be, vagy éppen tárgyat vett fel.
+
+\subsection{A Config osztály}
+
+A \verb|Config| osztály a szerverprogram konfigurációját tárolja. Implementációja hasonló, mint a játékmotor esetén, azonban az \verb|init()| metódusában eltérő alapértelmezett beállításokat definiálok. Az alapértelmezett beállítások tartalmazzák a szerver portszámát (\verb|port|), a maximális helyek számát (\verb|maxSlots|), a pályafájl nevét (\verb|mapFile|), valamint a generált labirintus méreteit (\verb|width|, \verb|height|).
+
+\newpage
+
+\section{Algoritmusok} % Algorithms
+
+\subsection{A randomizeDfs algoritmus}
+
+A \verb|randomizeDfs| egy mélységi bejáráson alapuló gráfelméleti algoritmus, amely a játékban a labirintusok generálását végzi. Az algoritmus verem adatszerkezettel megvalósított iteratív implementációját az alábbi struktogram szemlélteti:
+
+\vspace{5mm}
+
+\begin{struktogramm}(140,50)[\(randomizeDfs(startX: \mathbb{Z}, startY: \mathbb{Z}, endX: \mathbb{Z}, endY: \mathbb{Z})\)]
+	\assign[10]{\(initialCell := mazeCells[startY][startX]\)}
+	\assign[10]{\(initialCell \to visit()\)}
+	\assign[10]{\(initialCell \to setStart()\)}
+	\assign[10]{\(stack.push(initialCell)\)}
+	\while[10]{\(\neg stack.empty()\)}
+		\assign[10]{\(currentCell := stack.top()\)}
+		\assign[10]{\(stack.pop()\)}
+		\ifthenelse[13]{8}{1}{\(\neg currentCell \to isStart()\)}{}{}
+			\case[12]{4}{2}{\(random(0, 9)\)}{0}
+				\assign[10]{\(putItem(currentCell)\)}
+			\switch{1}
+				\assign[10]{\(putNPC(currentCell)\)}
+			\caseend
+		\change
+		\ifend
+		\assign[10]{\(neighbors := getUnvisitedNeighbors(currentCell)\)}
+		\ifthenelse[10]{4}{1}{\(\neg neighbors.empty()\)}{}{}
+			\assign[10]{\(index := random(0, neighbors.size()-1)\)}
+			\assign[10]{\(cell := neighbors[index]\)}
+			\assign[10]{\(cell \to visit()\)}
+			\assign[10]{\(removeWallBetween(currentCell, cell)\)}
+			\assign[10]{\(stack.push(currentCell)\)}
+			\assign[10]{\(stack.push(cell)\)}
+		\change
+		\ifend
+	\whileend
+	\assign[10]{\(backtrackIter(startX, startY, endX, endY)\)}
+\end{struktogramm}
+
+\newpage
+
+\subsection{A backtrackIter algoritmus}
+
+A \verb|backtrackIter| visszalépéses keresést alkalmazva generál a labirintushoz egy megoldást, azaz egy összekötő utat a bejárat és a kijárat között. Az algoritmus szintén egy iteratívan megvalósított a mélységi bejárás. Ezen algoritmus közvetlenül a labirintus legenerálása után kerül lefuttatásra.
+
+\vspace{5mm}
+
+\begin{struktogramm}(140,50)[\(backtrackIter(startX: \mathbb{Z}, startY: \mathbb{Z}, endX: \mathbb{Z}, endY: \mathbb{Z})\)]
+	\while[10]{\(i := 0 .. height-1\)}
+		\while[10]{\(j := 0 .. width-1\)}
+			\assign[10]{\(mazeCells[i][j] \to unVisit() \)}
+		\whileend
+	\whileend
+	\assign[10]{\(currentCell := mazeCells[startY][startX]\)}
+	\assign[10]{\(finishCell := mazeCells[endY][endX]\)}
+	\assign[10]{\(currentCell \to visit()\)}
+	\assign[10]{\(finishCell \to setFinish()\)}
+	\while[10]{\(currentCell \neq finishCell\)}
+		\assign[10]{\(neighbors := getUnvisitedAccessibleNeighbors(currentCell)\)}
+		\ifthenelse[12]{4}{1}{\(\neg neighbors.empty()\)}{}{}
+			\assign[10]{\(index := random(0, neighbors.size()-1)\)}
+			\assign[10]{\(cell := neighbors[index]\)}
+			\assign[10]{\(cell \to visit()\)}
+			\assign[10]{\(currentCell \to setFinishPath()\)}
+			\assign[10]{\(stack.push(currentCell)\)}
+			\assign[10]{\(currentCell := cell\)}
+			\assign[10]{\textbf{continue}}
+		\change
+		\ifend
+		\assign[10]{\(currentCell \to unSetFinishPath()\)}
+		\assign[10]{\(currentCell := stack.top()\)}
+		\assign[10]{\(stack.pop()\)}
+	\whileend
+\end{struktogramm}
+
+\newpage
+
+\section{Tesztelés}
+
+A szoftver működésének tesztelését az úgynevezett fehér doboz tesztelési módszerrel valósítom meg. Lényege, hogy a teszteseteket a program belső szerkezetének (forráskódjának) figyelembevételével kell implementálni. Így meg lehet győződni egy-egy főbb metódus helyes működéséről, azaz, hogy különböző bemenetekre helyes visszatérési értéket adnak-e. A cél, hogy a szoftver minél alaposabban le legyen tesztelve, erre jó módszer a kimerítő út tesztelés. Itt a lehető legtöbb fajta tesztesetet kell létrehozni egy adott metódusra, hogy az összes szélsőséges eset lefedésre kerüljön.
+
+A tesztelés helyességéről akkor lehet meggyőződni, ha minden teszteset átmegy. A játékmotor unit tesztelése során minden teszteset sikeresen lefutott, ennek eredményét az alábbi ábra szemlélteti.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=1\textwidth]{passed.png}
+	\caption{Sikeres tesztelés}
+\end{figure}
+
+A fehér doboz tesztelés megvalósításához a \verb|main.cpp| fájlban unit teszteseteket implementáltam a \verb|Catch2| \cite{catch2} keretrendszer segítségével. A tesztek futtatásához a programot unit teszt módban kell fordítani és elindítani. Ehhez a fájl elején található \verb|CATCH_CONFIG_MAIN| szimbólumot kell definiálni, amely alapértelmezetten ki van kommentezve. A tesztesetek a függvények megfelelő visszatérési értékét, valamint a procedúrák különféle mellékhatásait tesztelik (például fájlok írása és olvasása). A tesztekhez tartozó bemeneti, valamint kimeneti fájlok a \verb|test| mappában érhetők el. A program által végzett teszteket a következő oldalon található táblázat tartalmazza.
+
+\newpage
+
+\begin{table}[H]
+	\centering
+	\begin{tabular}{ | m{0.35\textwidth} | m{0.55\textwidth} | }
+		\hline
+		\textbf{Teszteset neve} & \textbf{Leírás} \\
+		\hline \hline
+		\emph{Initializes and saves configuration correctly} & Ellenőrzi, hogy az alapértelmezett konfigurációs fájl létrehozásra kerül a megfelelő adatokkal a \verb|Config| osztály \verb|init()| és \verb|save()| metódusainak meghívásával \\
+		\hline
+		\emph{Map saves state correctly} & Ellenőrzi, hogy egy adott pálya állapota megfelelően mentésre kerül az állás mentésekor a \verb|Map| osztály \verb|saveState()| metódusával \\
+		\hline
+		\emph{Map loads entities correctly} & Ellenőrzi, hogy egy adott pályafájl betöltése után megfelelően létrejönnek-e a pálya entitásai a \verb|Map| osztály \verb|loadEntities()| metódusával \\
+		\hline
+		\emph{Two entities collide} & Ellenőrzi, hogy két egymásba érő entitás \verb|checkCollision()| metódusa megfelelő értéket vesz fel \\
+		\hline
+		\emph{Two entities don't collide} & Ellenőrzi, hogy két egymástól távol lévő entitás \verb|checkCollision()| metódusa megfelelő értéket vesz fel \\
+		\hline
+		\emph{Camera calculates correct position} & Ellenőrzi, hogy a kamera koordinátáit tartalmazó vektor megfelelő értékeket vesz fel a paraméterek (\verb|yaw|, \verb|pitch|) beállítása után \\
+		\hline
+		\emph{Editor saves map correctly} & Ellenőrzi, hogy egy pályaszerkesztővel létrehozott és mentett pályafájl a megfelelő adatokkal kerül mentésre \\
+		\hline
+		\emph{Editor loads map correctly} & Ellenőrzi, hogy egy pályaszerkesztővel létrehozott és mentett pályafájl blokkjai megfelelően létrejönnek betöltésekor \\
+		\hline
+		\emph{Editor selects a block} & Ellenőrzi, hogy a pályaszerkesztő megfelelően kijelöli a megadott koordinátán elhelyezkedő blokkot \\
+		\hline
+	\end{tabular}
+	\caption{A tesztesetek leírása}
+	\label{tab:example-1}
+\end{table}

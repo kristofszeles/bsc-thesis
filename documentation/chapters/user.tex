@@ -1,0 +1,365 @@
+\chapter{Felhasználói dokumentáció} % User guide
+\label{ch:user}
+
+A felhasználói dokumentáció olyan segédletet nyújt a felhasználó számára, amely nem igényel programozói ismereteket és könnyen elsajátíthatóvá válik a szoftver használata. Részletes leírást ad a futtatásról, a funkciók működéséről és a konfigurálhatóságról.
+
+A játékmotor egy labirintusjátékot valósít meg, amelyben egy- vagy több játékos bolyonghat véletlenszerűen generált labirintusokban, vagy a pályaszerkesztővel készített egyedi pályákon. A szoftver két fő egységre bontható: A kliensoldalon futó játékprogramra (\verb|maze-game|), valamint a szerverprogramra (\verb|maze-server|). Ezen fő egységek bővebb leírása a következő alfejezetekben (2.2, 2.3) lesz olvasható.
+
+\section{Rendszerkövetelmények}
+
+A szoftver az implementációnak köszönhetően multiplatformos, azaz több különböző rendszeren is futtatható. Elsősorban Windows és Linux rendszereken teszteltem a működését, de számtalan más rendszerre is könnyen átfordítható a megfelelő eszközök segítségével. A program fordításáról a fejlesztői dokumentációban (3. fejezetben) esik szó.
+
+Minimális hardverkövetelmények:
+
+\begin{itemize}
+	\item Legalább 2 magos 2 GHz-es processzor (Intel vagy AMD)
+	\item Minimum 4 GB belső rendszermemória
+	\item OpenGL 3.0 (vagy későbbi) támogatottsággal rendelkező videokártya
+\end{itemize}
+
+Szoftverkövetelmények:
+
+\begin{itemize}
+	\item Windows operációs rendszer esetén Windows 7 vagy újabb kiadás
+	\item Linux operációs rendszer esetén elsősorban Debian alapú rendszerek (például Ubuntu, Linux Mint)
+\end{itemize}
+
+Debian alapú rendszereken program a következő csomagokat igényli a futtatáshoz:
+
+\begin{itemize}
+	\item libsdl2-2.0-0
+	\item libsdl2-image-2.0-0
+	\item libsdl2-net-2.0-0
+	\item libglew2.1
+\end{itemize}
+
+\newpage
+
+\section{A játékprogram (maze-game)}
+
+A játékprogram a \verb|Release| mappában található \verb|maze-game.exe| futtatásával indítható el Windows rendszeren. Induláskor a felhasználót a játék főmenüje fogadja, ami a 2.1 ábrán látható. A háttérben látható egy demó mód, amelyben a program automatikusan generál egy labirintust és ''végigsétál'' rajta. Ez a játékélménybe nyújt közvetlen betekintést.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=1\textwidth]{menu.png}
+	\caption{A játékprogram főmenüje}
+\end{figure}
+
+A felhasználó a választása szerint a program különböző részeire kerülhet. A menüpontok bővebben az alfejezetekben vannak részletezve. A főmenü a következő menüpontokból áll:
+
+\begin{table}[H]
+	\centering
+	\begin{tabular}{ | m{0.35\textwidth} | m{0.55\textwidth} | }
+		\hline
+		\textbf{Menüpont neve} & \textbf{Leírás} \\
+		\hline \hline
+		\emph{New Game} & Új játék indítása egyjátékos módban \\
+		\hline
+		\emph{Continue Game} & Legutóbbi játék folytatása egyjátékos módban \\
+		\hline
+		\emph{Multiplayer} & Játék indítása többjátékos módban \\
+		\hline
+		\emph{Map Editor} & Beépített pályaszerkesztő indítása \\
+		\hline
+		\emph{Quit Game} & Kilépés a játékból \\
+		\hline
+	\end{tabular}
+	\caption{A játékmenü leírása}
+	\label{tab:example-1}
+\end{table}
+
+\subsection{Konfiguráció}
+
+A játékprogram konfigurációját a \verb|game-config.json| fájl tárolja. Ha a fájl nem létezik, akkor a program automatikusan létrehozza az alapértelmezett beállításokkal. A fájl az indításkor betöltődik, ami meghatározza bizonyos komponensnek működését. Kilépéskor a fájl mentésre kerül, azaz a felhasználó beállításai perzisztens módon ''megjegyzésre'' kerülnek. A fájl a következő konfigurációs paramétereket definiálja:
+
+\begin{itemize}
+	\item \verb|game|: játékmotor beállításai
+	\begin{itemize}
+		\item \verb|cameraFov|: kamera látószögének mérete fokokban
+		\item \verb|renderDistance|: látótávolság sugara egységekben
+		\item \verb|mouseSensitivity|: egérérzékenység (0.1 és 1.0 közötti érték, 0.1 - leglassabb, 1.0 - leggyorsabb)
+		\item \verb|vehicle|: aktuálisan kiválasztott jármű típusának száma
+		\item \verb|singlePlayer|: egyjátékos mód beállításai
+		\begin{itemize}
+			\item \verb|score|: játékos pontszáma a legutóbbi játékban
+			\item \verb|health|: játékos életereje a legutóbbi játékban
+			\item \verb|highScore|: eddigi legnagyobb pontszám
+		\end{itemize}
+	\end{itemize}
+	\item \verb|maze|: labirintusgenerátor beállításai (\verb|easy|, \verb|medium|, \verb|hard|)
+	\begin{itemize}
+		\item \verb|width|: labirintus szélessége
+		\item \verb|height|: labirintus magassága
+	\end{itemize}
+	\item \verb|multiplayer|: többjátékos mód beállításai
+	\begin{itemize}
+		\item \verb|defaultHost|: szerver hosztneve (IP címe)
+		\item \verb|defaultPort|: szerver portszáma
+		\item \verb|playerName|: játékos neve
+	\end{itemize}
+	\item \verb|window|: programablak beállításai
+	\begin{itemize}
+		\item \verb|defaultWidth|: az ablak alapértelmezett szélessége
+		\item \verb|defaultHeight|: az ablak alapértelmezett magassága
+		\item \verb|maximized|: az ablak maximalizálva van-e
+	\end{itemize}
+\end{itemize}
+
+\subsection{Vezérlés}
+
+A játékos irányítása a billentyűzet, valamint az egér használatával történik. A billentyűzeten lévő nyilakkal, illetve a \verb|W|, \verb|A|, \verb|S|, \verb|D| gombokkal mozgatható a játékos a pályán. Az egér segítségével pedig körül lehet nézni a világban, azaz elforgatható, valamint dönthető a kamera iránya. A gombokhoz rendelt eseményekről részletesebb leírást ad az alábbi táblázat:
+
+\begin{table}[H]
+	\centering
+	\begin{tabular}{ | m{0.45\textwidth} | m{0.45\textwidth} | }
+		\hline
+		\textbf{Esemény} & \textbf{Leírás} \\
+		\hline \hline
+		\emph{Billentyűlenyomás (F2)} & Kameramód váltása FPS (belső nézetes) és TPS (hátulnézetes) mód között \\
+		\hline
+		\emph{Billentyűlenyomás (F11)} & A programablak maximalizálása/visszaállítása \\
+		\hline
+		\emph{Billentyűlenyomás (W, vagy felfele nyíl)} & Játékos mozgatása előre \\
+		\hline
+		\emph{Billentyűlenyomás (S, vagy lefele nyíl)} & Játékos mozgatása hátra \\
+		\hline
+		\emph{Billentyűlenyomás (A, vagy balra nyíl)} & Játékos mozgatása balra \\
+		\hline
+		\emph{Billentyűlenyomás (D, vagy jobbra nyíl)} & Játékos mozgatása jobbra \\
+		\hline
+		\emph{Billentyűlenyomás (ESCAPE)} & Kilépés a főmenübe \\
+		\hline
+		\emph{Egér mozgatás jobbra/balra, fel/le} & Kamera forgatása (yaw - elforgatás az Y tengelyen, pitch - döntés a Z tengelyen) \\
+		\hline
+		\emph{Egér görgetés fel/le} & Kamera zoomolása TPS (hátulnézetes) módban előre/hátra \\
+		\hline
+		\emph{Egérgomb lenyomás (jobb)} & Kurzor elfogása/elengedése \\
+		\hline
+	\end{tabular}
+	\caption{A játék vezérlése}
+	\label{tab:example-1}
+\end{table}
+
+\subsection{Egyjátékos mód (Single Player)}
+
+Egyjátékos módban a felhasználó (játékos) egy megadott nehézségű, véletlenszerűen generált labirintusban bolyonghat és különféle kincsek felszedésével pontokat gyűjthet. Azonban a játékos nincs egyedül: A pályán számítógép által irányított járművek (NPC-k) furikáznak, amelyekkel ütközve a játékos életerőt veszít. Ha az életerő eléri a nullát, akkor a játék véget ér (Game Over) és az elért pontszám megjelenik a képernyőn az eddigi legjobb pontszámmal együtt, ezt illusztrálja a 2.2 ábra.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=1\textwidth]{gameover.png}
+	\caption{Game Over képernyő egyjátékos módban}
+\end{figure}
+
+A főmenüben a \verb|Continue Game| opcióra kattintva lehetőség van a legutóbb játszott játék folytatására, ha volt korábban mentés. Ha még nem volt, akkor új játékot kell kezdeni. A 2.3 ábra alapján látható, hogy új játék esetén kiválasztható a használni kívánt jármű. A billentyűzeten található bal és jobb nyilakkal lehet válogatni a járművek között, majd az \verb|ENTER| gomb lenyomása után a következő lépésben megadható a játék nehézségi szintje, ami alapján a program egy labirintust generál véletlenszerűen. Ezen nehézségi szintek a konfigurációs fájlban vannak definiálva és az alábbiak érhetők el:
+
+\begin{itemize}
+	\item \verb|Easy|: könnyű
+	\item \verb|Medium|: közepes
+	\item \verb|Hard|: nehéz
+\end{itemize}
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=1\textwidth]{vehicles.png}
+	\caption{Jármű kiválasztása}
+\end{figure}
+
+Továbbá lehetőség van a pályaszerkesztővel készített pályát is betölteni a \verb|Custom Map...| opcióra kattintva. A labirintus bonyolultsága lehet nagyon nehéz, vagy nagyon egyszerű, ez leginkább a méreteitől függ.
+
+A pályákon különböző kincsek találhatóak, amelyek összegyűjtésével a játék során bónuszpontokat lehet szerezni. Az összegyűjtött pontszám a bal felső sarokban látszódik. Emellett fellelhetők különböző bájitalok is, amelyekkel gyorsítható, vagy éppen lassítható a játékos mozgása. A játékban található tárgyakat és az általuk kiváltott hatásukat az alábbi táblázat mutatja:
+
+\begin{table}[H]
+	\centering
+	\begin{tabular}{ | m{0.45\textwidth} | m{0.45\textwidth} | }
+		\hline
+		\textbf{Tárgy neve} & \textbf{Leírás} \\
+		\hline \hline
+		\emph{\includegraphics[width=12pt,valign=c]{Item1.png} Gem (ékkő)} & A játékos 1000 pontot kap \\
+		\hline
+		\emph{\includegraphics[width=12pt,valign=c]{Item4.png} Ruby (rubint)} & A játékos 800 pontot kap \\
+		\hline
+		\emph{\includegraphics[width=12pt,valign=c]{Item2.png} Emerald (smaragd)} & A játékos 500 pontot kap \\
+		\hline
+		\emph{\includegraphics[width=12pt,valign=c]{Item3.png} Gold (arany)} & A játékos 400 pontot kap \\
+		\hline
+		\emph{\includegraphics[width=12pt,valign=c]{Item5.png} Fast Potion (gyorsító bájital)} & A játékos mozgása 5 másodpercre felgyorsul \\
+		\hline
+		\emph{\includegraphics[width=12pt,valign=c]{Item6.png} Slow Potion (lassító bájital)} & A játékos mozgása 10 másodpercre lelassul \\
+		\hline
+	\end{tabular}
+	\caption{A labirintusban fellelhető tárgyak}
+	\label{tab:example-1}
+\end{table}
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=1\textwidth]{singleplayer.png}
+	\caption{Közepes nehézségű labirintus egyjátékos módban}
+\end{figure}
+
+Egy bájital felvétele esetén a képernyő jobb felső sarkában megjelenik annak neve, mellette egy számláló, amely visszaszámol, amíg tart a hatása. Ezáltal a játékos tudhatja, hogy egy ilyen ital hatása mennyi ideig fog tartani. Ha egy másik hatása még tart, akkor az utólag felvett bájital hatása kiváltja az előző hatását.
+
+A kijárat megtalálása esetén a játékos 10 ezer pontot kap, majd egy újabb labirintusba kerül, amely más felépítéssel rendelkezik, valamint a tárgyak és az NPC-k is máshol helyezkednek el, a számuk és fajtájuk is véletlenszerű.
+
+\subsection{Többjátékos mód (Multiplayer)}
+
+Többjátékos módban több felhasználó is részt vehet egy labirintusjátékban. Először a játékos nevét kell megadni, ami alapján azonosítható lesz a pályán. Az \verb|ENTER| gomb lenyomásával lehet a következő képernyőre lépni, ahol kiválasztható egy jármű, amelyet a többi játékos fog látni, ez lesz a játékos ''karaktere''. Végül a szerver IP címét és a portszámát kell beírni kettősponttal elválasztva, ahova a kliens csatlakozni fog. A \verb|CTRL+V| billentyűkombinációt alkalmazva beilleszthető a vágólap tartalma, így nem szükséges kézzel begépelni a hosszú címeket.
+
+Lehetőség van más, eltérő játékosokkal és labirintussal rendelkező szerverekre is csatlakozni. Csatlakozás után mindenki ugyanabban a labirintusban vesz részt és a játékosok látják egymás karakterét, tudnak versenyezni, hogy ki fogja előbb megtalálni a kijáratot. A kijárat megtalálása a lehető legtöbb pontot éri. Emellett a pályán szétszórt kincsek felszedésével is tudnak bónusz pontokat gyűjteni.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=1\textwidth]{multiplayer.png}
+	\caption{Többjátékos módban résztvevő játékosok}
+\end{figure}
+
+\subsubsection{Toplista}
+
+A 2.5 ábrán is látható, hogy a bal felső sarokban található a toplista, amely a szerver által számontartott játékosok pontszámait tartalmazza sorszámokkal ellátva. Legfelül, az első helyen az eddigi legtöbb pontot elért játékos található, utána a többi, csökkenő sorrendben. A pontszámok listája automatikusan frissül, amint valaki pontot szerez, belép, vagy kilép a játékból. Ha egy játékos kilép a szerverről, akkor a pontszáma törlődik és a következő belépésnél újra kell kezdenie a játékot.
+
+\subsubsection{Chat ablak}
+
+A képernyő bal alsó sarkában található egy chat ablak, ahol a legutóbbi 5 másodpercben fogadott 5 üzenet látható. Itt jelennek meg a szerver által küldött üzenetek (például ha egy játékos csatlakozott, vagy megnyerte a játékot). A játékosok küldhetnek egymásnak saját, rövid chat üzeneteket is, így a játék közben tudnak írásban beszélgetni. Ezt a \verb|T| (talk) gomb megnyomásával lehet kezdeményezni. Ilyenkor megjelenik egy szövegmező, ahova beírható a küldeni kívánt üzenet, majd az \verb|ENTER| gomb lenyomásával elküldhető. Az \verb|ESCAPE| gombbal pedig bezárható a chat ablak, az üzenet elküldése nélkül.
+
+A szerver által küldött üzenetek a következők lehetnek:
+
+\begin{table}[H]
+	\centering
+	\begin{tabular}{ | m{0.45\textwidth} | m{0.45\textwidth} | }
+		\hline
+		\textbf{Üzenet} & \textbf{Leírás} \\
+		\hline \hline
+		\emph{<játékosnév> has connected to the server} & Az adott nevű játékos csatlakozott a szerverhez \\
+		\hline
+		\emph{<játékosnév> has disconnected from the server} & Az adott nevű játékos kilépett a szerverről \\
+		\hline
+		\emph{<játékosnév> has picked up an item} & Az adott nevű játékos felvett egy tárgyat a pályán \\
+		\hline
+		\emph{<játékosnév> has won the game} & Az adott nevű játékos megnyerte a játékot \\
+		\hline
+		\emph{<játékosnév>: <üzenet>} & Az adott nevű játékos chat üzenetet küldött \\
+		\hline
+	\end{tabular}
+	\caption{A szerver által küldött üzenetek}
+	\label{tab:example-1}
+\end{table}
+
+\newpage
+
+\subsection{Pályaszerkesztő (Map Editor)}
+
+A beépített pályaszerkesztővel tetszőleges felépítésű pályák készíthetők kétdimenziós nézetben. Működése leginkább egy rajzprogramhoz hasonló, viszont itt képpontok helyett blokkok (falak, tárgyak stb.) rajzolhatók a képernyőre. A használathoz nem szükségesek különösebb ismeretek, csupán elegendő az egér használata.
+
+A képernyő alján található menüsoron lévő gombokkal vezérelhető a program működése, illetve ezen funkciók a billentyűzet segítségével is elérhetők. A kiválasztott típusú blokk a kurzor alatt megjelenik előnézetként és az egér bal gombját lenyomva elhelyezhető a pályán, a jobb gombbal pedig törölhetők az elhelyezett blokkok. A kiválasztott típust görgetéssel (fel/le) lehet változtatni. A megjelenő blokkok közül az ''N'' betű az \verb|NPC|-ket jelöli. Nagyobb pályák építése esetén a kamera mozgatható az egér mozgatásával a középső gombot nyomva tartva.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=1\textwidth]{editor.png}
+	\caption{Pályaszerkesztő 100$\times$100-as generált labirintussal}
+\end{figure}
+
+\newpage
+
+A gyorsbillentyűk és a program által kezelt események leírását a következő táblázat tartalmazza:
+
+\begin{table}[H]
+	\centering
+	\begin{tabular}{ | m{0.35\textwidth} | m{0.55\textwidth} | }
+		\hline
+		\textbf{Esemény} & \textbf{Leírás} \\
+		\hline \hline
+		\emph{Billentyűlenyomás (F1)} & Új, üres pálya létrehozása \\
+		\hline
+		\emph{Billentyűlenyomás (F2)} & Új, véletlenszerű labirintus generálása a megadott paraméterekkel (szélesség, magasság) \\
+		\hline
+		\emph{Billentyűlenyomás (F3)} & Pálya megnyitása és betöltése a szerkesztőbe (dialógusablakban kiválasztható a fájl) \\
+		\hline
+		\emph{Billentyűlenyomás (F4)} & Szerkesztett pálya mentése fájlba (dialógusablakban kiválasztható a fájl) \\
+		\hline
+		\emph{Billentyűlenyomás (bal/jobb nyíl)} & A falak textúrájának változtatása \\
+		\hline
+		\emph{Billentyűlenyomás (ESCAPE)} & Kilépés a főmenübe \\
+		\hline
+		\emph{Egérgomb lenyomás (bal)} & A kiválasztott blokk elhelyezése a kurzor alatt a pályán, vagy a kezdőpont forgatása, ha az volt kijelölve \\
+		\hline
+		\emph{Egérgomb lenyomás (jobb)} & A kurzor alatti blokk törlése a pályáról \\
+		\hline
+		\emph{Egérgomb lenyomás (középső)} & A kamera mozgatása az egér mozgatásával \\
+		\hline
+		\emph{Egér görgetés (fel/le)} & A kiválasztott blokk típusának változtatása \\
+		\hline
+		\emph{Fájl behúzása az ablakba} & Az ablakba behúzott pályafájl betöltése \\
+		\hline
+	\end{tabular}
+	\caption{A pályaszerkesztő eseményeinek leírása}
+	\label{tab:example-1}
+\end{table}
+
+Fontos megjegyezni, hogy mentéskor a program ellenőrzi a bejárat, illetve a kijárat létezését. Amennyiben nem léteznek, a program egy hibaüzenettel felhívja a felhasználó figyelmét ezen blokkok elhelyezésére. Miután elhelyezésre került a bejárat és a kijárat, a következő próbálkozással már menthető a pálya.
+
+\newpage
+
+\section{A szerverprogram (maze-server)}
+
+A szerverprogrammal lehetőség van játékszervert hosztolni. A program futhat a játékprogram mellett, nem feltétlenül kell külön gépen futnia, valamint a játékprogramot (vagyis a klienst) futtató operációs rendszer is eltérhet a szerverprogram rendszerétől. A program használata észszerű: Indítása után elindul a konfigurációban megadott portszámon, majd elkezdi fogadni a csatlakozó játékosokat.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=1\textwidth]{server.png}
+	\caption{A szerverprogram konzolablaka futás közben}
+\end{figure}
+
+A program visszajelzi a felhasználónak a sikeres indulást (\verb|Server is now running on port XXXXX|). Ellenkező esetben egy felugró hibaüzenetben jelzi a hiba pontos okát, amiért nem tudott elindulni. A szerver IP címe mindig a futtató gép IP címével egyezik meg, lehetőség van az interneten keresztül is csatlakozni a megfelelő tűzfalbeállítások mellett.
+
+Induláskor a szerverprogram véletlenszerűen generál egy labirintust, amelyet a játékhoz való csatlakozáskor elküld a játékosnak. Amint valaki elérte a célt, a program új labirintust generál.
+
+\newpage
+
+\subsection{Konfiguráció}
+
+A szerverprogram konfigurációja a \verb|server-config.json| fájlban van tárolva. Ha a fájl nem létezik, akkor a program automatikusan létrehozza az alapértelmezett beállításokkal. A könnyebb átláthatóság kedvéért JSON \cite{json} formátumot alkalmazok, amely egy kulcs-érték párokat tartalmazó objektum. A fájl a következő konfigurációs paramétereket tartalmazza:
+
+\begin{itemize}
+	\item \verb|maze|: labirintusgenerátor beállításai
+	\begin{itemize}
+		\item \verb|width|: labirintus szélessége
+		\item \verb|height|: labirintus magassága
+	\end{itemize}
+	\item \verb|server|: szerver beállításai
+	\begin{itemize}
+		\item \verb|port|: portszám, amelyen a szerver figyelni fog
+		\item \verb|maxSlots|: maximális slotok (helyek) száma
+		\item \verb|mapFile|: a használni kívánt egyedi pályafájl elérési útvonala
+	\end{itemize}
+\end{itemize}
+
+A \verb|mapFile| kitöltése esetén a szerverprogram megpróbálja betölteni a pályafájlt a megadott elérési útvonalról. Ha sikeresen megtalálta, akkor induláskor új labirintus generálása helyett a fájlban tárolt pályát fogja betölteni.
+
+\newpage
+
+\subsection{Parancsok}
+
+A szerverprogram ablakába írva különböző parancsokat lehet kiadni, amellyel befolyásolható a működése. Lényegében adminisztrátorként kezelhetők a játékhoz csatlakozott játékosok. Ezen parancsok listája a \verb|help| paranccsal listázhatók ki. A program a következő parancsokat kezeli:
+
+\begin{table}[H]
+	\centering
+	\begin{tabular}{ | m{0.35\textwidth} | m{0.55\textwidth} | }
+		\hline
+		\textbf{Parancs} & \textbf{Leírás} \\
+		\hline \hline
+		\emph{generate} & Új labirintus generálása és új játék kezdése \\
+		\hline
+		\emph{players} & Játékosok neveinek kilistázása \\
+		\hline
+		\emph{scores} & Játékosok által elért pontszámok kilistázása \\
+		\hline
+		\emph{kickall} & Összes játékos kirakása a játékból \\
+		\hline
+		\emph{kick <játékosnév>} & Megadott nevű játékos kirakása a játékból \\
+		\hline
+		\emph{stop} & Szerverprogram leállítása és kilépés \\
+		\hline
+	\end{tabular}
+	\caption{A szerverprogram által kezelt parancsok}
+	\label{tab:example-1}
+\end{table}

@@ -1,0 +1,11 @@
+{
+  "maze": {
+    "height": 10,
+    "width": 10
+  },
+  "server": {
+    "mapFile": "",
+    "maxSlots": 5,
+    "port": 9999
+  }
+}

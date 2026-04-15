@@ -1,0 +1,39 @@
+#pragma once
+
+#include <string>
+#include <SDL.h>
+#include <SDL_opengl.h>
+#include <list>
+#include <map>
+
+#include "position.h"
+#include "texture.h"
+#include "window.h"
+
+class Button;
+
+class DrawUtils {
+private:
+	Window* window;
+	SDL_Surface** fonts;
+	std::map<std::string, Texture*>* textures;
+public:
+	DrawUtils(Window* window, SDL_Surface** fonts, std::map<std::string, Texture*>* textures) : window(window), fonts(fonts), textures(textures) {}
+	void drawTexture2D(Texture* texture, float x, float y, float scale, float width = 0, float height = 0);
+	void drawRectangle(SDL_Color color, float x, float y, float width, float height);
+	void drawBackground2D(Texture* texture);
+	void drawText(const std::string& text, float x, float y, float scale);
+	void drawTextInput(const std::string& message, const std::string& input);
+	void drawLabel(Texture* texture);
+	void drawLogo(Texture* texture);
+	void drawAuthor(Texture* texture);
+	void drawButtonGroup(const std::list<Button*>& buttons);
+	Window* getWindow() { return window; }
+	SDL_Surface** getFonts() { return fonts; }
+	std::map<std::string, Texture*>* getTextures() { return textures; }
+};
+
+SDL_Surface* loadImage(const std::string& fileName);
+GLuint createTextureFromSurface(SDL_Surface* surface);
+GLuint createTextureFromImage(const std::string& fileName);
+GLuint renderText(const std::string& text, SDL_Surface** fonts);
