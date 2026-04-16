@@ -4,6 +4,7 @@
 #include <nfd.hpp>
 
 #include "game.h"
+#include "gl_compat.h"
 #include "maze.h"
 #include "drawutils.h"
 #include "editor.h"
@@ -156,7 +157,7 @@ GLuint Game::linkShaders(const std::string& vertexShader, const std::string& fra
 
 void Game::loadShaders() {
     m_programID_1 = linkShaders(vertexShader, fragmentShader1);
-    m_programID_2 = linkShaders(vertexShader, fragmentShader2);
+    m_programID_2 = linkShaders(vertexShaderUnlit, fragmentShader2);
 }
 
 void Game::deleteShaders() {
@@ -850,9 +851,9 @@ void Game::drawMesh(const Position& position, Mesh* mesh, GLuint m_loc) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, mesh->getTexture());
     glUniform1i(glGetUniformLocation(m_loc, "texImage"), 0);
-    glBindVertexArray(mesh->getVaoID());
+    glCompatBindVertexArray(mesh->getVaoID());
     glDrawElements(GL_TRIANGLES, mesh->getIndices().size(), GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0);
+    glCompatBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);  // unbind texture
     glUseProgram(0);
 }
@@ -875,9 +876,9 @@ void Game::drawBillboard(const Position& position, Texture* texture) {
     glBindTexture(GL_TEXTURE_2D, texture->getData());
     glUniform1i(glGetUniformLocation(m_programID_2, "texImage"), 0);
     Mesh* mesh = meshes.at("billboard.obj");
-    glBindVertexArray(mesh->getVaoID());
+    glCompatBindVertexArray(mesh->getVaoID());
     glDrawElements(GL_TRIANGLES, mesh->getIndices().size(), GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0);
+    glCompatBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);  // unbind texture
     glUseProgram(0);
     glEnable(GL_DEPTH_TEST);

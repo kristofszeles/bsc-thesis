@@ -1,6 +1,8 @@
 #pragma once
 
 #include <GL/glew.h>
+
+#include "gl_compat.h"
 #include <SDL_image.h>
 #include <fstream>
 #include <glm/glm.hpp>

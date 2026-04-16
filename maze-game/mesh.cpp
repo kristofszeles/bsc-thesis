@@ -11,15 +11,15 @@ Mesh::Mesh() {
 Mesh::~Mesh() {
     glDeleteBuffers(1, &m_vboID);
     glDeleteBuffers(1, &m_ibID);
-    glDeleteVertexArrays(1, &m_vaoID);
+    glCompatDeleteVertexArrays(1, &m_vaoID);
 }
 
 void Mesh::init() {
-    glGenVertexArrays(1, &m_vaoID);
+    glCompatGenVertexArrays(1, &m_vaoID);
     glGenBuffers(1, &m_vboID);
     glGenBuffers(1, &m_ibID);
 
-    glBindVertexArray(m_vaoID);
+    glCompatBindVertexArray(m_vaoID);
     glBindBuffer(GL_ARRAY_BUFFER, m_vboID);
     glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex) * vertices.size(), vertices.data(), GL_STATIC_DRAW);
 
@@ -33,7 +33,7 @@ void Mesh::init() {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibID);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * indices.size(), indices.data(), GL_STATIC_DRAW);
 
-    glBindVertexArray(0);
+    glCompatBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 }

@@ -4,9 +4,9 @@
     "mouseSensitivity": 0.2,
     "renderDistance": 30,
     "singlePlayer": {
-      "health": 100,
-      "highScore": 0,
-      "score": 10000
+      "health": 9,
+      "highScore": 56900,
+      "score": 800
     },
     "vehicle": 37
   },
@@ -30,8 +30,8 @@
     "playerName": "asdasdwdas3"
   },
   "window": {
-    "defaultHeight": 996,
-    "defaultWidth": 1920,
-    "maximized": true
+    "defaultHeight": 504,
+    "defaultWidth": 789,
+    "maximized": false
   }
 }

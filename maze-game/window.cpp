@@ -13,6 +13,7 @@ Window::Window(const std::string& windowTitle, int windowWidth, int windowHeight
     exit = false;
     window = SDL_CreateWindow(windowTitle.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, windowWidth, windowHeight, flags);
     context = SDL_GL_CreateContext(window);
+    glewExperimental = GL_TRUE;
     if (glewInit() != GLEW_OK) perror("Glew: ");
     if (DEBUG_MODE) {
         glEnable(GL_DEBUG_OUTPUT);
