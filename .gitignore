@@ -2,3 +2,8 @@
 .vs
 Debug
 Release
+
+# Unix build outputs
+maze-game/maze-game
+maze-server/maze-server
+maze-game/build/
