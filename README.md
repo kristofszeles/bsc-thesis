@@ -1,11 +1,6 @@
 # Multiplayer 3D Maze Game in OpenGL
 
-> **BSc Thesis** by Kristof Szeles
-> Eotvos Lorand University (ELTE), Faculty of Informatics
-> Department of Programming Languages and Compilers
-> Supervisor: Norbert Pataki &mdash; 2021
-
-A first-person 3D maze game built from scratch in **C++20** using **OpenGL** and **SDL2**. Players navigate randomly generated labyrinths, collect treasures, avoid NPC vehicles, and compete with others in real-time multiplayer over TCP.
+This project was written by Kristóf Széles as a BSc thesis at Eötvös Loránd University (ELTE) Faculty of Informatics under the supervision of Norbert Pataki in 2021. It is a first-person 3D maze game built from scratch in **C++20** using **OpenGL** and **SDL2**. Players navigate randomly generated labyrinths, collect treasures, avoid NPC vehicles, and compete with others in real-time multiplayer over TCP.
 
 ![Main Menu](documentation/images/menu.png)
 
@@ -45,7 +40,7 @@ The main menu features a live demo mode in the background where the camera autom
 - **Built-in map editor** for creating custom maps in a 2D painting interface
 - **Multithreaded game server** with admin console commands and anti-cheat detection
 - **Configurable** via JSON files for both client and server
-- **Cross-platform** support for Windows and Linux
+- **Cross-platform** support for Windows, Linux, and macOS
 - **40+ selectable vehicles** with 3D models
 - **Multiple skybox and wall textures** for visual variety
 
@@ -76,6 +71,24 @@ cd maze-game && sh build-linux.sh && cd ..
 ```
 
 > **Note:** The game build scripts link against `-lnfd` from a local `lib/` directory. You may need to build the [Native File Dialog](https://github.com/mlabbe/nativefiledialog) library and place it in `maze-game/lib/`, or adjust the linker flags for your system.
+
+**macOS** &mdash; Install [Homebrew](https://brew.sh/) if you do not have it, then install the toolchain and libraries and run the macOS build scripts:
+
+```bash
+# Apple Clang and build tools (skip if already installed)
+xcode-select --install
+
+# Dependencies: SDL2, networking, image loading, OpenGL extension loader, pkg-config, CMake
+brew install cmake pkgconf sdl2 sdl2_image sdl2_net glew
+
+# Build the server
+cd maze-server && sh build-macos.sh && cd ..
+
+# Build the game (first run clones and builds nativefiledialog-extended; requires git and network)
+cd maze-game && sh build-macos.sh && cd ..
+```
+
+The game uses headers and libraries from Homebrew for SDL2 and GLEW (the copies under `maze-game/include` that target Windows are not used for this build). On the first `build-macos.sh` run, [nativefiledialog-extended](https://github.com/btzy/nativefiledialog-extended) is fetched into `maze-game/build/` and built to `maze-game/build/nfd/libnfd.a`. GTK is not required on macOS.
 
 ### 2. Play single player
 
@@ -109,6 +122,7 @@ In the game, select **Multiplayer**, enter your name, choose a vehicle, and conn
 
 - **Windows:** Windows 7 or later
 - **Linux:** Debian-based distributions (Ubuntu, Linux Mint, etc.)
+- **macOS:** Recent releases with Xcode Command Line Tools and Homebrew dependencies as described in [Quick Start](#quick-start) (tested with Apple Clang and SDL2 from Homebrew)
 
 ---
 
@@ -429,9 +443,3 @@ Test data files live in `maze-game/test/`:
 | Editor saves map correctly | Map editor file output matches expected format |
 | Editor loads map correctly | Map editor block loading matches expected state |
 | Editor selects a block | Block selection at coordinates works correctly |
-
----
-
-## License
-
-This project was developed as a BSc thesis at ELTE, Faculty of Informatics.
