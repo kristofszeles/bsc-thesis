@@ -43,13 +43,15 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             g++ cmake git pkg-config \
             libsdl2-dev libsdl2-image-dev libsdl2-net-dev \
-            libgtk-3-dev libglew-dev libglu1-mesa-dev zlib1g-dev
+            libgtk-3-dev libglew-dev libglu1-mesa-dev zlib1g-dev \
+            libwayland-dev
 
       - name: Build (Linux)
         if: matrix.package == 'linux'
         run: |
-          cd maze-server && sh build-linux-ci.sh && cd ..
-          cd maze-game && sh build-linux-ci.sh && cd ..
+          set -euo pipefail
+          (cd maze-server && sh build-linux-ci.sh)
+          (cd maze-game && sh build-linux-ci.sh)
 
       - name: Package (Linux)
         if: matrix.package == 'linux'
@@ -67,13 +69,32 @@ jobs:
         if: matrix.package == 'windows'
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+          function Resolve-BuildExe([string]$projectDir, [string]$exeName) {
+            $paths = @(
+              (Join-Path $projectDir "Release\$exeName")
+              (Join-Path $projectDir "Win32\Release\$exeName")
+              (Join-Path $projectDir "Release\Win32\$exeName")
+              (Join-Path $projectDir "x86\Release\$exeName")
+            )
+            foreach ($p in $paths) {
+              if (Test-Path -LiteralPath $p) { return $p }
+            }
+            $found = Get-ChildItem -Path $projectDir -Recurse -Filter $exeName -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match "(\\|/)(Release|RelWithDebInfo)(\\|/)" } |
+              Select-Object -First 1
+            if ($found) { return $found.FullName }
+            throw "Could not find $exeName under $projectDir. Checked: $($paths -join ', ')"
+          }
           $v = "${{ env.VERSION_LABEL }}"
           $name = "bsc-thesis-$v-windows-x86"
           New-Item -ItemType Directory -Force -Path "$name/maze-game", "$name/maze-server" | Out-Null
-          Copy-Item "maze-game/Release/maze-game.exe" "$name/maze-game/"
+          $gameExe = Resolve-BuildExe "maze-game" "maze-game.exe"
+          $serverExe = Resolve-BuildExe "maze-server" "maze-server.exe"
+          Copy-Item -LiteralPath $gameExe "$name/maze-game/"
           Copy-Item "maze-game/*.dll" "$name/maze-game/"
           Copy-Item -Recurse "maze-game/textures", "maze-game/fonts", "maze-game/models" "$name/maze-game/"
-          Copy-Item "maze-server/Release/maze-server.exe" "$name/maze-server/"
+          Copy-Item -LiteralPath $serverExe "$name/maze-server/"
           Copy-Item "maze-server/*.dll" "$name/maze-server/"
           if (Test-Path "${name}.zip") { Remove-Item "${name}.zip" }
           Compress-Archive -Path $name -DestinationPath "${name}.zip"

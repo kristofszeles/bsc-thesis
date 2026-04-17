@@ -7,7 +7,7 @@ set -e
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-for pkg in gtk+-3.0 sdl2 SDL2_image SDL2_net glew; do
+for pkg in gtk+-3.0 sdl2 SDL2_image SDL2_net glew wayland-client; do
   pkg-config --exists "$pkg" || {
     echo "Missing pkg-config module '$pkg'. Install build dependencies (see README)."
     exit 1
@@ -22,6 +22,8 @@ if [ ! -f "$NFD_A" ]; then
   if [ ! -d "$NFD_SRC/.git" ]; then
     git clone --depth 1 https://github.com/btzy/nativefiledialog-extended.git "$NFD_SRC"
   fi
+  # Linux build expects XML protocols from the wayland-protocols submodule (not in shallow clone by default).
+  (cd "$NFD_SRC" && git submodule update --init --recursive)
   cmake -S "$NFD_SRC" -B "$NFD_SRC/build" -DCMAKE_BUILD_TYPE=Release -DNFD_BUILD_TESTS=OFF
   cmake --build "$NFD_SRC/build" -j"$(nproc 2>/dev/null || echo 4)"
   mkdir -p "$SCRIPT_DIR/build/nfd"
@@ -29,10 +31,12 @@ if [ ! -f "$NFD_A" ]; then
 fi
 
 CXX="${CXX:-g++}"
+# libnfd.a is built with Wayland support; link wayland-client immediately after -lnfd (static lib deps order).
 "$CXX" *.cpp -o maze-game \
   -O3 -Wall -pedantic -std=c++20 -no-pie \
   -Iinclude \
   -L"$SCRIPT_DIR/build/nfd" -lnfd \
+  $(pkg-config --libs wayland-client) \
   $(pkg-config --cflags gtk+-3.0 sdl2 SDL2_image SDL2_net glew) \
   $(pkg-config --libs gtk+-3.0 sdl2 SDL2_image SDL2_net glew) \
   -lGL -lGLU -lz -pthread

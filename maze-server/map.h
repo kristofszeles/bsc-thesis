@@ -20,7 +20,7 @@ public:
     void loadEntities(std::stringstream& data);
     void setSkyboxTexture(const std::string& value) { this->skyboxTexture = value; }
     void setTileTexture(const std::string& value) { this->tileTexture = value; }
-    void removeItem(Entity* item) { entities.erase(std::remove(entities.begin(), entities.end(), item), entities.end()); }
+    void removeItem(Entity* item) { entities.remove(item); }
     void removeItemAt(float x, float z);
     Entity* getStart() { return start; }
     Entity* getFinish() { return finish; }
