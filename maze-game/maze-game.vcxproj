@@ -124,7 +124,11 @@
     <ClInclude Include="texture.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="app.ico" />
     <None Include="entity.cd" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="maze-game.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

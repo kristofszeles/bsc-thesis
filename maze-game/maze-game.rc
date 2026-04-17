@@ -1,0 +1,2 @@
+/* Lowest icon resource ID is shown as the .exe icon in Explorer */
+101 ICON "app.ico"

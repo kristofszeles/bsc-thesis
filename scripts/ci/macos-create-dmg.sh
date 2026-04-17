@@ -37,6 +37,11 @@ cp "$PLIST_SERVER" "$SERVER_APP/Contents/Info.plist"
 cp maze-game/maze-game "$GAME_APP/Contents/MacOS/maze-game"
 chmod +x "$GAME_APP/Contents/MacOS/maze-game"
 cp -R maze-game/textures maze-game/fonts maze-game/models "$GAME_APP/Contents/Resources/"
+# Dock / Finder icon from textures/bg.png (also keep a copy at bundle root).
+BG_SRC="$ROOT/maze-game/textures/bg.png"
+cp "$BG_SRC" "$GAME_APP/Contents/Resources/bg.png"
+sh "$ROOT/scripts/ci/mac/png-to-icns.sh" "$BG_SRC" "$GAME_APP/Contents/Resources/AppIcon.icns"
+cp "$GAME_APP/Contents/Resources/AppIcon.icns" "$SERVER_APP/Contents/Resources/AppIcon.icns"
 
 cp maze-server/maze-server "$SERVER_APP/Contents/MacOS/maze-server"
 chmod +x "$SERVER_APP/Contents/MacOS/maze-server"
