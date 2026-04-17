@@ -163,7 +163,8 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: package
-    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    # Use github.ref (not ref_type) + explicit needs.package.result so this job is not skipped incorrectly.
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.package.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
