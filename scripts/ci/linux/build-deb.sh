@@ -10,8 +10,20 @@ if [ -z "$VERSION_LABEL" ]; then
   exit 1
 fi
 
-ROOT="$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)"
-cd "$ROOT"
+# This script lives in scripts/ci/linux/ — three levels up to repo root (not two).
+if [ -n "${GITHUB_WORKSPACE:-}" ]; then
+  ROOT="$GITHUB_WORKSPACE"
+else
+  SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+  ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../../.." && pwd)"
+fi
+cd "$ROOT" || exit 1
+
+if [ ! -f maze-game/maze-game ] || [ ! -f maze-server/maze-server ]; then
+  echo "error: maze-game/maze-game and maze-server/maze-server must exist (run Linux build first)." >&2
+  echo "  cwd=$ROOT" >&2
+  exit 1
+fi
 
 PKG="bsc-thesis-maze"
 ARCH="$(dpkg --print-architecture)"
