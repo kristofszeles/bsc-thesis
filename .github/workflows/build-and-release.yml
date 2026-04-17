@@ -92,22 +92,9 @@ jobs:
           cd maze-server && sh build-macos.sh && cd ..
           cd maze-game && sh build-macos.sh && cd ..
 
-      - name: Bundle dylibs (macOS)
+      - name: Create .app bundles and DMG (macOS)
         if: matrix.package == 'macos'
-        run: |
-          set -e
-          bundle_one() {
-            cd "$1"
-            dylibbundler -od -b -x "./$2" -d ./libs -p "@executable_path/libs/" \
-              -s /opt/homebrew/lib -s /usr/local/lib
-            cd ..
-          }
-          bundle_one maze-game maze-game
-          bundle_one maze-server maze-server
-
-      - name: Package (macOS)
-        if: matrix.package == 'macos'
-        run: sh scripts/ci/package-release.sh macos "${{ env.VERSION_LABEL }}"
+        run: sh scripts/ci/macos-create-dmg.sh "${{ env.VERSION_LABEL }}"
 
       - name: Upload artifact (Linux)
         if: matrix.package == 'linux'
@@ -130,7 +117,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dist-macos-${{ env.VERSION_LABEL }}
-          path: bsc-thesis-${{ env.VERSION_LABEL }}-macos.tar.gz
+          path: bsc-thesis-${{ env.VERSION_LABEL }}-macos.dmg
           if-no-files-found: error
 
   release:
