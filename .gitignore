@@ -7,3 +7,6 @@ Release
 maze-game/maze-game
 maze-server/maze-server
 maze-game/build/
+
+# CI local venv (macOS DMG icon build)
+.ci-venv-macos/

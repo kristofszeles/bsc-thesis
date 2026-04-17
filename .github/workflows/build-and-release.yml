@@ -118,7 +118,9 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE: 1
         run: |
           brew install cmake pkgconf sdl2 sdl2_image sdl2_net glew dylibbundler
-          python3 -m pip install "pillow>=10.0.0"
+          python3 -m venv "${GITHUB_WORKSPACE}/.ci-venv-macos"
+          "${GITHUB_WORKSPACE}/.ci-venv-macos/bin/pip" install --upgrade pip
+          "${GITHUB_WORKSPACE}/.ci-venv-macos/bin/pip" install "pillow>=10.0.0"
 
       - name: Build (macOS)
         if: matrix.package == 'macos'
@@ -128,7 +130,9 @@ jobs:
 
       - name: Create .app bundles and DMG (macOS)
         if: matrix.package == 'macos'
-        run: sh scripts/ci/macos-create-dmg.sh "${{ env.VERSION_LABEL }}"
+        run: |
+          export PATH="${GITHUB_WORKSPACE}/.ci-venv-macos/bin:${PATH}"
+          sh scripts/ci/macos-create-dmg.sh "${{ env.VERSION_LABEL }}"
 
       - name: Upload artifact (Linux)
         if: matrix.package == 'linux'
