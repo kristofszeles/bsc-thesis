@@ -1,0 +1,158 @@
+# Cross-platform builds; on version tags (v*), uploads archives to a GitHub Release.
+name: Build and release
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Package (${{ matrix.package }})
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION_LABEL: ${{ github.ref_type == 'tag' && github.ref_name || format('ci-{0}', github.sha) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            package: linux
+          - os: windows-latest
+            package: windows
+          - os: macos-latest
+            package: macos
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: matrix.package == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++ cmake git pkg-config \
+            libsdl2-dev libsdl2-image-dev libsdl2-net-dev \
+            libgtk-3-dev libglew-dev libglu1-mesa-dev zlib1g-dev
+
+      - name: Build (Linux)
+        if: matrix.package == 'linux'
+        run: |
+          cd maze-server && sh build-linux-ci.sh && cd ..
+          cd maze-game && sh build-linux-ci.sh && cd ..
+
+      - name: Package (Linux)
+        if: matrix.package == 'linux'
+        run: sh scripts/ci/package-release.sh linux "${{ env.VERSION_LABEL }}"
+
+      - name: Setup MSBuild (Windows)
+        if: matrix.package == 'windows'
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build (Windows)
+        if: matrix.package == 'windows'
+        run: msbuild bsc-thesis.sln /m /p:Configuration=Release /p:Platform=x86 /verbosity:minimal
+
+      - name: Package (Windows)
+        if: matrix.package == 'windows'
+        shell: pwsh
+        run: |
+          $v = "${{ env.VERSION_LABEL }}"
+          $name = "bsc-thesis-$v-windows-x86"
+          New-Item -ItemType Directory -Force -Path "$name/maze-game", "$name/maze-server" | Out-Null
+          Copy-Item "maze-game/Release/maze-game.exe" "$name/maze-game/"
+          Copy-Item "maze-game/*.dll" "$name/maze-game/"
+          Copy-Item -Recurse "maze-game/textures", "maze-game/fonts", "maze-game/models" "$name/maze-game/"
+          Copy-Item "maze-server/Release/maze-server.exe" "$name/maze-server/"
+          Copy-Item "maze-server/*.dll" "$name/maze-server/"
+          if (Test-Path "${name}.zip") { Remove-Item "${name}.zip" }
+          Compress-Archive -Path $name -DestinationPath "${name}.zip"
+          Remove-Item -Recurse -Force $name
+
+      - name: Install dependencies (macOS)
+        if: matrix.package == 'macos'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+        run: |
+          brew install cmake pkgconf sdl2 sdl2_image sdl2_net glew dylibbundler
+
+      - name: Build (macOS)
+        if: matrix.package == 'macos'
+        run: |
+          cd maze-server && sh build-macos.sh && cd ..
+          cd maze-game && sh build-macos.sh && cd ..
+
+      - name: Bundle dylibs (macOS)
+        if: matrix.package == 'macos'
+        run: |
+          set -e
+          bundle_one() {
+            cd "$1"
+            dylibbundler -od -b -x "./$2" -d ./libs -p "@executable_path/libs/" \
+              -s /opt/homebrew/lib -s /usr/local/lib
+            cd ..
+          }
+          bundle_one maze-game maze-game
+          bundle_one maze-server maze-server
+
+      - name: Package (macOS)
+        if: matrix.package == 'macos'
+        run: sh scripts/ci/package-release.sh macos "${{ env.VERSION_LABEL }}"
+
+      - name: Upload artifact (Linux)
+        if: matrix.package == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux-${{ env.VERSION_LABEL }}
+          path: bsc-thesis-${{ env.VERSION_LABEL }}-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+      - name: Upload artifact (Windows)
+        if: matrix.package == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows-${{ env.VERSION_LABEL }}
+          path: bsc-thesis-${{ env.VERSION_LABEL }}-windows-x86.zip
+          if-no-files-found: error
+
+      - name: Upload artifact (macOS)
+        if: matrix.package == 'macos'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-macos-${{ env.VERSION_LABEL }}
+          path: bsc-thesis-${{ env.VERSION_LABEL }}-macos.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: package
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*-${{ github.ref_name }}
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
