@@ -141,7 +141,8 @@ jobs:
           name: dist-linux-${{ env.VERSION_LABEL }}
           path: |
             bsc-thesis-${{ env.VERSION_LABEL }}-linux-x86_64.tar.gz
-            bsc-thesis-maze_*.deb
+            bsc-thesis-maze-game_*.deb
+            bsc-thesis-maze-server_*.deb
           if-no-files-found: error
 
       - name: Upload artifact (Windows)
