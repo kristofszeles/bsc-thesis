@@ -7,7 +7,7 @@
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleExecutable</key>
-	<string>maze-server</string>
+	<string>maze-server-launcher</string>
 	<key>CFBundleIdentifier</key>
 	<string>hu.elte.inf.bsc-thesis.maze-server</string>
 	<key>CFBundleInfoDictionaryVersion</key>

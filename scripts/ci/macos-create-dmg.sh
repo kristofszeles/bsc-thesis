@@ -45,6 +45,9 @@ cp "$GAME_APP/Contents/Resources/AppIcon.icns" "$SERVER_APP/Contents/Resources/A
 
 cp maze-server/maze-server "$SERVER_APP/Contents/MacOS/maze-server"
 chmod +x "$SERVER_APP/Contents/MacOS/maze-server"
+cp "$ROOT/scripts/ci/mac/maze-server-launcher.sh" \
+  "$SERVER_APP/Contents/MacOS/maze-server-launcher"
+chmod +x "$SERVER_APP/Contents/MacOS/maze-server-launcher"
 
 bundle_libs() {
   APP="$1"
