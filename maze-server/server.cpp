@@ -1,9 +1,89 @@
 #include <iostream>
 #include <filesystem>
+#include <set>
+#include <string>
+#include <vector>
 #include <sole.hpp>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iphlpapi.h>
+#pragma comment(lib, "iphlpapi.lib")
+#else
+#include <ifaddrs.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#endif
 
 #include "serverthread.h"
 #include "server.h"
+
+namespace {
+
+std::vector<std::string> localNetworkIPv4Strings() {
+    std::set<std::string> unique;
+#ifdef _WIN32
+    ULONG bufLen = 15000;
+    std::vector<BYTE> buffer(bufLen);
+    auto* addresses = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer.data());
+    ULONG ret = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+                                     nullptr, addresses, &bufLen);
+    if (ret == ERROR_BUFFER_OVERFLOW) {
+        buffer.resize(bufLen);
+        addresses = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer.data());
+        ret = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+                                   nullptr, addresses, &bufLen);
+    }
+    if (ret != NO_ERROR) {
+        return {};
+    }
+    for (auto* aa = addresses; aa; aa = aa->Next) {
+        if (aa->OperStatus != IfOperStatusUp) {
+            continue;
+        }
+        for (auto* ua = aa->FirstUnicastAddress; ua; ua = ua->Next) {
+            if (!ua->Address.lpSockaddr || ua->Address.lpSockaddr->sa_family != AF_INET) {
+                continue;
+            }
+            auto* sin = reinterpret_cast<sockaddr_in*>(ua->Address.lpSockaddr);
+            if (sin->sin_addr.s_addr == htonl(INADDR_LOOPBACK)) {
+                continue;
+            }
+            char buf[INET_ADDRSTRLEN];
+            if (InetNtopA(AF_INET, &sin->sin_addr, buf, INET_ADDRSTRLEN)) {
+                unique.insert(buf);
+            }
+        }
+    }
+#else
+    ifaddrs* ifa = nullptr;
+    if (getifaddrs(&ifa) != 0) {
+        return {};
+    }
+    for (ifaddrs* p = ifa; p; p = p->ifa_next) {
+        if (!p->ifa_addr || p->ifa_addr->sa_family != AF_INET) {
+            continue;
+        }
+        auto* a = reinterpret_cast<sockaddr_in*>(p->ifa_addr);
+        if (a->sin_addr.s_addr == htonl(INADDR_LOOPBACK)) {
+            continue;
+        }
+        char buf[INET_ADDRSTRLEN];
+        if (inet_ntop(AF_INET, &a->sin_addr, buf, sizeof(buf))) {
+            unique.insert(buf);
+        }
+    }
+    freeifaddrs(ifa);
+#endif
+    return std::vector<std::string>(unique.begin(), unique.end());
+}
+
+}  // namespace
 
 Server::Server() {
     this->stop = false;
@@ -29,7 +109,19 @@ Server::Server() {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "SDLNet_TCP_Open", SDLNet_GetError(), nullptr);
         exit(1);
     }
-    std::cout << "Server is now running on port " << port << "..." << std::endl;
+    std::cout << "Listening on port " << port;
+    std::vector<std::string> addrs = localNetworkIPv4Strings();
+    if (!addrs.empty()) {
+        std::cout << " (";
+        for (size_t i = 0; i < addrs.size(); ++i) {
+            if (i > 0) {
+                std::cout << ", ";
+            }
+            std::cout << addrs[i];
+        }
+        std::cout << ")";
+    }
+    std::cout << "..." << std::endl;
     std::string mapFile = config->getData()["server"]["mapFile"];
     if (mapFile.empty() || !std::filesystem::exists(mapFile)) generateMap();
     else loadMap(mapFile);
