@@ -238,9 +238,17 @@ void Server::handleCommand(const std::string& line) {
 }
 
 void Server::checkCollision(const std::string& id) {
-    for (auto& entity : map->getEntities()) {
+    std::lock_guard<std::recursive_mutex> lck(mtx);
+    if (!map || !players.contains(id)) {
+        return;
+    }
+    float x = players[id]["x"];
+    float z = players[id]["z"];
+    // Snapshot entities: iterating while broadcastWinGame/generateMap replaces the map or
+    // broadcastPickUpItem/removeItemAt mutates the entity list invalidates range-for iterators.
+    std::vector<Entity*> entities(map->getEntities().begin(), map->getEntities().end());
+    for (Entity* entity : entities) {
         if (typeid(*entity) == typeid(Tile)) continue;
-        float x = players[id]["x"], z = players[id]["z"];
         if (x + 1.0f >= entity->getX() - 1.0f && x - 1.0f <= entity->getX() + 1.0f && z + 1.0f >= entity->getZ() - 1.0f && z - 1.0f <= entity->getZ() + 1.0f) {
             if (typeid(*entity) == typeid(Finish)) {
                 addPlayerScore(id, 10000);
@@ -260,17 +268,17 @@ void Server::checkCollision(const std::string& id) {
 }
 
 void Server::setPlayerName(const std::string& id, const std::string& name) {
-    std::lock_guard<std::mutex> lck(mtx);
+    std::lock_guard<std::recursive_mutex> lck(mtx);
     players[id]["name"] = name;
 }
 
 void Server::setPlayerVehicle(const std::string& id, const std::string& vehicle) {
-    std::lock_guard<std::mutex> lck(mtx);
+    std::lock_guard<std::recursive_mutex> lck(mtx);
     players[id]["vehicle"] = vehicle;
 }
 
 void Server::setPlayerPosition(const std::string& id, float x, float z, float angle) {
-    std::lock_guard<std::mutex> lck(mtx);
+    std::lock_guard<std::recursive_mutex> lck(mtx);
     players[id]["id"] = id;
     players[id]["x"] = x;
     players[id]["z"] = z;
@@ -278,17 +286,18 @@ void Server::setPlayerPosition(const std::string& id, float x, float z, float an
 }
 
 void Server::setPlayerScore(const std::string& id, int value) {
-    std::lock_guard<std::mutex> lck(mtx);
+    std::lock_guard<std::recursive_mutex> lck(mtx);
     scores[id]["name"] = players[id]["name"];
     scores[id]["score"] = value;
 }
 
 void Server::broadcastMessage(const json& message) {
-    std::lock_guard<std::mutex> lck(mtx);
+    std::lock_guard<std::recursive_mutex> lck(mtx);
     messageQueue.push(message.dump());
 }
 
 void Server::broadcastNewMap() {
+    std::lock_guard<std::recursive_mutex> lck(mtx);
     json message;
     generateMap();
     for (auto& player : players) setPlayerPosition(player["id"], map->getStart()->getX(), map->getStart()->getZ(), map->getStart()->getAngle());

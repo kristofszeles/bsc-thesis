@@ -33,7 +33,7 @@ private:
 	IPaddress ip;
 	TCPsocket serverSocket;
     Map* map;
-    std::mutex mtx;
+    std::recursive_mutex mtx;
 	std::list<ServerThread*> serverThreads;
     std::queue<std::string> messageQueue;
     const std::string CONFIG_FILE_NAME = "server-config.json";
