@@ -2,10 +2,10 @@
 
 #include <string>
 #include <SDL.h>
-#include <SDL_opengl.h>
 #include <list>
 #include <map>
 
+#include "gl_core.h"
 #include "position.h"
 #include "texture.h"
 #include "window.h"
@@ -19,6 +19,7 @@ private:
 	std::map<std::string, Texture*>* textures;
 public:
 	DrawUtils(Window* window, SDL_Surface** fonts, std::map<std::string, Texture*>* textures) : window(window), fonts(fonts), textures(textures) {}
+	void setGLES2DOrtho(float width, float height);
 	void drawTexture2D(Texture* texture, float x, float y, float scale, float width = 0, float height = 0);
 	void drawRectangle(SDL_Color color, float x, float y, float width, float height);
 	void drawBackground2D(Texture* texture);

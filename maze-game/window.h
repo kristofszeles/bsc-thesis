@@ -1,6 +1,6 @@
 #pragma once
 
-#include <GL/glew.h>
+#include "gl_core.h"
 #include <SDL.h>
 #include <SDL_image.h>
 #include <glm/glm.hpp>
@@ -43,10 +43,15 @@ public:
         glViewport(0, 0, viewportWidth, viewportHeight);
     }
     void setProjectionMatrixSize(int width, int height) {
+#if !defined(__ANDROID__)
         glMatrixMode(GL_PROJECTION);
         glLoadIdentity();
         glOrtho(0, width, height, 0, -1, 1);
         glMatrixMode(GL_MODELVIEW);
+#else
+        (void)width;
+        (void)height;
+#endif
     }
     int getWidth() const { return windowWidth; }
     int getHeight() const { return windowHeight; }

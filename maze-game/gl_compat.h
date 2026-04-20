@@ -1,7 +1,7 @@
 #pragma once
 
 // macOS legacy OpenGL 2.1 exposes VAOs via GL_APPLE_vertex_array_object; core glGenVertexArrays is NULL.
-#include <GL/glew.h>
+#include "gl_core.h"
 
 inline void glCompatGenVertexArrays(GLsizei n, GLuint* ids) {
 #ifdef __APPLE__

@@ -2,23 +2,32 @@
 
 #include "window.h"
 
+#if !defined(__ANDROID__)
 void GLAPIENTRY MessageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam) {
     if (type == GL_DEBUG_TYPE_ERROR) std::cout << "OpenGL error: " << message << std::endl;
 }
+#endif
 
 Window::Window(const std::string& windowTitle, int windowWidth, int windowHeight, bool maximized, bool hidden) : windowTitle(windowTitle), windowWidth(windowWidth), windowHeight(windowHeight) {
     Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
     if (maximized) flags |= SDL_WINDOW_MAXIMIZED;
     if (hidden) flags |= SDL_WINDOW_HIDDEN;
     exit = false;
+#if defined(__ANDROID__)
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#endif
     window = SDL_CreateWindow(windowTitle.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, windowWidth, windowHeight, flags);
     context = SDL_GL_CreateContext(window);
+#if !defined(__ANDROID__)
     glewExperimental = GL_TRUE;
     if (glewInit() != GLEW_OK) perror("Glew: ");
     if (DEBUG_MODE) {
         glEnable(GL_DEBUG_OUTPUT);
         glDebugMessageCallback(MessageCallback, 0);
     }
+#endif
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     setViewportSize(windowWidth, windowHeight);

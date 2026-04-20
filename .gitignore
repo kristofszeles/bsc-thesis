@@ -10,3 +10,13 @@ maze-game/build/
 
 # CI local venv (macOS DMG icon build)
 .ci-venv-macos/
+
+# Android / SDL sources (fetched in CI or locally into jni/)
+android/app/jni/SDL/
+android/app/jni/SDL_image/
+android/app/jni/SDL_net/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/java/org/

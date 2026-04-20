@@ -21,9 +21,12 @@ private:
 
     const char* WINDOW_TITLE = "Maze Game";
     const int COLLISION_DISTANCE = 5;
-    const std::string LAST_MAP_FILE_NAME = "last.map";
-    const std::string CONFIG_FILE_NAME = "game-config.json";
     const float cameraZNear = 0.5f, cameraZFar = 500.0f;
+
+    std::string assetRoot;
+    std::string writableRoot;
+    std::string gameConfigPath() const { return writableRoot + "game-config.json"; }
+    std::string lastMapPath() const { return writableRoot + "last.map"; }
 
     bool quit, relativeMouseMode, chatMode;
     int mazeWidth, mazeHeight;

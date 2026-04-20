@@ -72,6 +72,9 @@ void Editor::newMap() {
 }
 
 void Editor::saveMap() {
+#if defined(__ANDROID__)
+	return;
+#else
 	NFD::Guard nfdGuard;
 	NFD::UniquePath outPath;
 	nfdfilteritem_t filterItem[2] = { { "MAP file", "map" } };
@@ -85,6 +88,7 @@ void Editor::saveMap() {
 	} else {
 		std::cout << "Error: " << NFD::GetError() << std::endl;
 	}
+#endif
 }
 
 void Editor::saveMap(const std::string& fileName) {
@@ -99,6 +103,9 @@ void Editor::saveMap(const std::string& fileName) {
 }
 
 void Editor::openMap() {
+#if defined(__ANDROID__)
+	return;
+#else
 	NFD::Guard nfdGuard;
 	NFD::UniquePath fileName;
 	nfdfilteritem_t filterItem[2] = { { "MAP file", "map" } };
@@ -111,6 +118,7 @@ void Editor::openMap() {
 	} else {
 		std::cout << "Error: " << NFD::GetError() << std::endl;
 	}
+#endif
 }
 
 void Editor::loadMap(const std::string& fileName) {

@@ -1,20 +1,49 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
-#include <nfd.hpp>
+#include <vector>
+
+#include <SDL_system.h>
 
 #include "game.h"
+#if !defined(__ANDROID__)
+#include <nfd.hpp>
+#endif
 #include "gl_compat.h"
 #include "maze.h"
 #include "drawutils.h"
 #include "editor.h"
 #include "shaders.h"
 
+#if defined(__ANDROID__)
+static void maze_android_load_asset_lines(const std::string& path, std::vector<std::string>& out) {
+    std::ifstream f(path);
+    std::string line;
+    while (std::getline(f, line)) {
+        if (!line.empty()) {
+            out.push_back(line);
+        }
+    }
+}
+#endif
+
 Game::Game() {
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "SDL_Init", SDL_GetError(), nullptr);
         exit(1);
     }
+#if defined(__ANDROID__)
+    {
+        // SDL_GetBasePath is unsupported on Android; asset paths are relative to the APK asset root.
+        assetRoot.clear();
+        char* wb = SDL_GetPrefPath("com.bscthesis", "maze-game");
+        writableRoot = wb ? std::string(wb) : std::string();
+        SDL_free(wb);
+    }
+#else
+    assetRoot = "./";
+    writableRoot = "./";
+#endif
     if (IMG_Init(IMG_INIT_PNG) == -1) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "IMG_Init", IMG_GetError(), nullptr);
         exit(1);
@@ -25,7 +54,7 @@ Game::Game() {
     }
     map = nullptr;
     menu = nullptr;
-    config = new Config(CONFIG_FILE_NAME);
+    config = new Config(gameConfigPath());
     window = new Window(WINDOW_TITLE, config->getData()["window"]["defaultWidth"], config->getData()["window"]["defaultHeight"], config->getData()["window"]["maximized"]);
     client = new Client();
     camera = new Camera();
@@ -73,12 +102,12 @@ void Game::exitGame() {
 }
 
 void Game::loadResources() {
-    addTexture("background", new Texture(createTextureFromImage("./textures/bg.png")));
-    addTexture("select", new Texture(createTextureFromImage("./textures/select.png")));
-    fonts.push_back(loadImage("./fonts/numbers.png"));
-    fonts.push_back(loadImage("./fonts/uppercase.png"));
-    fonts.push_back(loadImage("./fonts/lowercase.png"));
-    fonts.push_back(loadImage("./fonts/specials.png"));
+    addTexture("background", new Texture(createTextureFromImage(assetRoot + "textures/bg.png")));
+    addTexture("select", new Texture(createTextureFromImage(assetRoot + "textures/select.png")));
+    fonts.push_back(loadImage(assetRoot + "fonts/numbers.png"));
+    fonts.push_back(loadImage(assetRoot + "fonts/uppercase.png"));
+    fonts.push_back(loadImage(assetRoot + "fonts/lowercase.png"));
+    fonts.push_back(loadImage(assetRoot + "fonts/specials.png"));
     labels.push_back(new Texture(renderText("3D Maze", fonts.data())));
     labels.push_back(new Texture(renderText("Game Over", fonts.data())));
     labels.push_back(new Texture(renderText("Kristof Szeles 2021", fonts.data())));
@@ -166,53 +195,118 @@ void Game::deleteShaders() {
 }
 
 void Game::loadTextures() {
-    std::string path = "./textures/";
-    for (auto& entry : std::filesystem::directory_iterator(path)) {
-        if (std::filesystem::is_directory(entry)) continue;
-        Texture* texture = new Texture(createTextureFromImage(entry.path().string()));
-        addTexture(entry.path().filename().string(), texture);
+#if defined(__ANDROID__)
+    std::vector<std::string> names;
+    maze_android_load_asset_lines(assetRoot + "filelists/textures_root.txt", names);
+    for (const auto& rel : names) {
+        std::filesystem::path p(rel);
+        Texture* texture = new Texture(createTextureFromImage(assetRoot + rel));
+        addTexture(p.filename().string(), texture);
     }
+#else
+    {
+        std::string path = assetRoot + "textures/";
+        for (auto& entry : std::filesystem::directory_iterator(path)) {
+            if (std::filesystem::is_directory(entry)) continue;
+            Texture* texture = new Texture(createTextureFromImage(entry.path().string()));
+            addTexture(entry.path().filename().string(), texture);
+        }
+    }
+#endif
 }
 
 void Game::loadSkyboxTextures() {
-    std::string path = "./textures/skyboxes/";
-    for (auto& entry : std::filesystem::directory_iterator(path)) {
-        if (std::filesystem::is_directory(entry)) continue;
-        Texture* texture = new Texture(createTextureFromImage(entry.path().string()));
-        addTexture(entry.path().filename().string(), texture);
-        skyboxTextures.push_back(entry.path().filename().string());
+#if defined(__ANDROID__)
+    std::vector<std::string> names;
+    maze_android_load_asset_lines(assetRoot + "filelists/skyboxes.txt", names);
+    for (const auto& rel : names) {
+        std::filesystem::path p(rel);
+        Texture* texture = new Texture(createTextureFromImage(assetRoot + rel));
+        addTexture(p.filename().string(), texture);
+        skyboxTextures.push_back(p.filename().string());
     }
+#else
+    {
+        std::string path = assetRoot + "textures/skyboxes/";
+        for (auto& entry : std::filesystem::directory_iterator(path)) {
+            if (std::filesystem::is_directory(entry)) continue;
+            Texture* texture = new Texture(createTextureFromImage(entry.path().string()));
+            addTexture(entry.path().filename().string(), texture);
+            skyboxTextures.push_back(entry.path().filename().string());
+        }
+    }
+#endif
 }
 
 void Game::loadTileTextures() {
-    std::string path = "./textures/tiles/";
-    for (auto& entry : std::filesystem::directory_iterator(path)) {
-        if (std::filesystem::is_directory(entry)) continue;
-        Texture* texture = new Texture(createTextureFromImage(entry.path().string()));
-        addTexture(entry.path().filename().string(), texture);
-        tileTextures.push_back(entry.path().filename().string());
+#if defined(__ANDROID__)
+    std::vector<std::string> names;
+    maze_android_load_asset_lines(assetRoot + "filelists/tiles.txt", names);
+    for (const auto& rel : names) {
+        std::filesystem::path p(rel);
+        Texture* texture = new Texture(createTextureFromImage(assetRoot + rel));
+        addTexture(p.filename().string(), texture);
+        tileTextures.push_back(p.filename().string());
     }
+#else
+    {
+        std::string path = assetRoot + "textures/tiles/";
+        for (auto& entry : std::filesystem::directory_iterator(path)) {
+            if (std::filesystem::is_directory(entry)) continue;
+            Texture* texture = new Texture(createTextureFromImage(entry.path().string()));
+            addTexture(entry.path().filename().string(), texture);
+            tileTextures.push_back(entry.path().filename().string());
+        }
+    }
+#endif
 }
 
 void Game::loadMeshes() {
-    std::string path = "./models/";
-    for (auto& entry : std::filesystem::directory_iterator(path)) {
-        if (std::filesystem::is_directory(entry)) continue;
+#if defined(__ANDROID__)
+    std::vector<std::string> names;
+    maze_android_load_asset_lines(assetRoot + "filelists/models_root.txt", names);
+    for (const auto& rel : names) {
+        std::filesystem::path p(rel);
         Mesh* mesh = new Mesh();
-        mesh->loadOBJ(entry.path().string());
-        addMesh(entry.path().filename().string(), mesh);
+        mesh->loadOBJ(assetRoot + rel);
+        addMesh(p.filename().string(), mesh);
     }
+#else
+    {
+        std::string path = assetRoot + "models/";
+        for (auto& entry : std::filesystem::directory_iterator(path)) {
+            if (std::filesystem::is_directory(entry)) continue;
+            Mesh* mesh = new Mesh();
+            mesh->loadOBJ(entry.path().string());
+            addMesh(entry.path().filename().string(), mesh);
+        }
+    }
+#endif
 }
 
 void Game::loadVehicleMeshes() {
-    std::string path = "./models/vehicles/";
-    for (auto& entry : std::filesystem::directory_iterator(path)) {
-        if (std::filesystem::is_directory(entry)) continue;
+#if defined(__ANDROID__)
+    std::vector<std::string> names;
+    maze_android_load_asset_lines(assetRoot + "filelists/vehicles.txt", names);
+    for (const auto& rel : names) {
+        std::filesystem::path p(rel);
         Mesh* mesh = new Mesh();
-        mesh->loadOBJ(entry.path().string());
-        addVehicleMesh(entry.path().filename().string(), mesh);
-        vehicles.push_back(entry.path().filename().string());
+        mesh->loadOBJ(assetRoot + rel);
+        addVehicleMesh(p.filename().string(), mesh);
+        vehicles.push_back(p.filename().string());
     }
+#else
+    {
+        std::string path = assetRoot + "models/vehicles/";
+        for (auto& entry : std::filesystem::directory_iterator(path)) {
+            if (std::filesystem::is_directory(entry)) continue;
+            Mesh* mesh = new Mesh();
+            mesh->loadOBJ(entry.path().string());
+            addVehicleMesh(entry.path().filename().string(), mesh);
+            vehicles.push_back(entry.path().filename().string());
+        }
+    }
+#endif
 }
 
 void Game::run() {
@@ -232,13 +326,13 @@ void Game::run() {
                     subMenu = SubMenu::CHOOSE_VEHICLE;
                     setPlayerScore(0);
                 } else if (event == 2) {  // continue game
-                    if (std::filesystem::exists(LAST_MAP_FILE_NAME)) {
+                    if (std::filesystem::exists(lastMapPath())) {
                         gameMode = GameMode::SINGLE_PLAYER;
                         screen = Screen::GAME;
                         setRelativeMouseMode(true);
                         deleteMenu();
                         camera->reset();
-                        loadMap(LAST_MAP_FILE_NAME);
+                        loadMap(lastMapPath());
                         setPlayerScore((int)config->getData()["game"]["singlePlayer"]["score"]);
                         map->getPlayer()->setHealth((int)config->getData()["game"]["singlePlayer"]["health"]);
                         setDrawModePerspective();
@@ -379,7 +473,7 @@ void Game::run() {
                 if (gameMode == GameMode::SINGLE_PLAYER) {
                     config->getData()["game"]["singlePlayer"]["score"] = playerScore;
                     config->getData()["game"]["singlePlayer"]["health"] = map->getPlayer()->getHealth();
-                    map->saveState(LAST_MAP_FILE_NAME);
+                    map->saveState(lastMapPath());
                 }
                 deleteMap();
                 initMenu();
@@ -681,6 +775,9 @@ void Game::handleCollisions() {
 }
 
 void Game::openMap() {
+#if defined(__ANDROID__)
+    (void)0;
+#else
     NFD::Guard nfdGuard;
     NFD::UniquePath fileName;
     nfdfilteritem_t filterItem[2] = { { "MAP file", "map" } };
@@ -698,6 +795,7 @@ void Game::openMap() {
     } else {
         std::cout << "Error: " << NFD::GetError() << std::endl;
     }
+#endif
 }
 
 void Game::loadMap(const std::string& fileName) {
@@ -947,6 +1045,11 @@ void Game::drawLoadingScreen() {
 }
 
 void Game::setDrawModeOrtho() {
+#if defined(__ANDROID__)
+    drawUtils->setGLES2DOrtho((float)window->getWidth(), (float)window->getHeight());
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+#else
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     glOrtho(0, window->getWidth(), window->getHeight(), 0, -1, 1);
@@ -955,15 +1058,20 @@ void Game::setDrawModeOrtho() {
     glDisable(GL_CULL_FACE);
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);
+#endif
 }
 
 void Game::setDrawModePerspective() {
     float cameraFov = camera->getMode() == 2 ? 45.0f : (float)config->getData()["game"]["cameraFov"];
     projection = glm::perspective(glm::radians(cameraFov), (float)window->getWidth() / window->getHeight(), cameraZNear, cameraZFar);
+#if !defined(__ANDROID__)
     glMatrixMode(GL_MODELVIEW);
+#endif
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
+#if !defined(__ANDROID__)
     glEnable(GL_TEXTURE_2D);
+#endif
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <GL/glew.h>
+#include "gl_core.h"
 
 #include "gl_compat.h"
 #include <SDL_image.h>

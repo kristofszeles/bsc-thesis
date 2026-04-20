@@ -2,6 +2,8 @@
 
 #ifndef CATCH_CONFIG_MAIN
 
+#include <SDL_main.h>
+
 #include "game.h"
 
 #ifdef __APPLE__

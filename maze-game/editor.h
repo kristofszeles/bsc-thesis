@@ -5,7 +5,9 @@
 #include <fstream>
 #include <sstream>
 #include <cmath>
+#if !defined(__ANDROID__)
 #include <nfd.hpp>
+#endif
 #include <map>
 #include <SDL.h>
 #include <nlohmann/json.hpp>

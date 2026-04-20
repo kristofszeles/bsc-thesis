@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include "gl_core.h"
+
 class Texture {
 private:
     float width, height;
