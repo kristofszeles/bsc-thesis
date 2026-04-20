@@ -76,7 +76,7 @@ val syncLauncherIcon by tasks.registering(Copy::class) {
 val generateAndroidAssetFileLists by tasks.registering {
     doLast {
         val mazeDir = rootProject.projectDir.resolve("../maze-game").canonicalFile
-        val outDir = layout.projectDirectory.dir("src/main/assets/filelists").get().asFile
+        val outDir = file("src/main/assets/filelists")
         outDir.mkdirs()
         val rootPath = mazeDir.toPath()
         fun writeList(listName: String, dir: File) {
@@ -85,7 +85,7 @@ val generateAndroidAssetFileLists by tasks.registering {
             val text = files.joinToString("\n") { f ->
                 rootPath.relativize(f.toPath()).toString().replace('\\', '/')
             } + "\n"
-            File(outDir, listName).writeText(text)
+            outDir.resolve(listName).writeText(text)
         }
         writeList("textures_root.txt", File(mazeDir, "textures"))
         writeList("skyboxes.txt", File(mazeDir, "textures/skyboxes"))
