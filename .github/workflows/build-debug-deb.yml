@@ -1,0 +1,55 @@
+# Linux debug .deb packages (symbols, -Og) for maze-game and maze-server — CI artifacts only.
+name: Build debug Debian packages
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-debug-deb:
+    name: Debug .deb (Ubuntu)
+    runs-on: ubuntu-24.04
+    env:
+      # Raw SHA: build-deb-debug.sh maps non-semver labels to 0.0.0~ci<12-hex> (no extra noise from a prefix).
+      VERSION_LABEL: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++ cmake git pkg-config \
+            libsdl2-dev libsdl2-image-dev libsdl2-net-dev \
+            libgtk-3-dev libglew-dev libglu1-mesa-dev zlib1g-dev \
+            libwayland-dev \
+            fakeroot
+
+      - name: Build (Linux debug)
+        run: |
+          set -euo pipefail
+          (cd maze-server && sh build-linux-ci-debug.sh)
+          (cd maze-game && sh build-linux-ci-debug.sh)
+
+      - name: Build Debian packages (debug)
+        run: sh scripts/ci/linux/build-deb-debug.sh "${{ env.VERSION_LABEL }}"
+
+      - name: Upload debug .deb artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux-debug-deb-${{ github.sha }}
+          path: |
+            bsc-thesis-maze-game-debug_*.deb
+            bsc-thesis-maze-server-debug_*.deb
+          if-no-files-found: error
