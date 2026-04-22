@@ -30,8 +30,20 @@ target_compile_features(main PRIVATE cxx_std_20)
 if(TARGET SDL2::SDL2main)
     target_link_libraries(main PRIVATE SDL2::SDL2main)
 endif()
+# GLES 3 / EGL: headers come from NDK; symbols live in libGLESv3.so / libEGL.so.
+# zlib: gzip decompress (client.cpp) uses inflate* from libz.so.
+find_library(GLESv3_LIB GLESv3)
+find_library(EGL_LIB EGL)
+find_library(Z_LIB z)
+if(NOT GLESv3_LIB OR NOT EGL_LIB OR NOT Z_LIB)
+    message(FATAL_ERROR "GLESv3/EGL/zlib not found (Android NDK sysroot issue)")
+endif()
+
 target_link_libraries(main PRIVATE
     SDL2::SDL2
     SDL2_image::SDL2_image
     SDL2_net::SDL2_net
+    ${GLESv3_LIB}
+    ${EGL_LIB}
+    ${Z_LIB}
 )
