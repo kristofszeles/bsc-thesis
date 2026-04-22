@@ -443,3 +443,11 @@ Test data files live in `maze-game/test/`:
 | Editor saves map correctly | Map editor file output matches expected format |
 | Editor loads map correctly | Map editor block loading matches expected state |
 | Editor selects a block | Block selection at coordinates works correctly |
+
+---
+
+## License
+
+This thesis repository (including the written thesis materials, source code, and assets distributed with it) is licensed under the **GNU General Public License v3.0**. See [`LICENSE`](LICENSE) for the full text.
+
+Copyright © 2021 Kristóf Széles.
