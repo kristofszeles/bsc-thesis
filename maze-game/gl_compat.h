@@ -32,3 +32,12 @@ inline void glCompatDeleteVertexArrays(GLsizei n, GLuint* ids) {
 #endif
     glDeleteVertexArrays(n, ids);
 }
+
+// GLES 3 allows program 0 in some specs, but several drivers mishandle it; leaving the last
+// program bound is fine because the next draw binds an explicit program again.
+inline void glCompatReleaseProgram() {
+#if defined(__ANDROID__)
+#else
+    glUseProgram(0);
+#endif
+}

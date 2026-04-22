@@ -10,7 +10,7 @@ private:
     Texture* texture;
 public:
     Button(const std::string& text, float x, float y, float scale, SDL_Surface** fonts) : x(x), y(y), scale(scale) {
-        texture = new Texture(renderText(text, fonts));
+        texture = renderText(text, fonts);
         width = texture->getWidth();
         height = texture->getHeight();
     }

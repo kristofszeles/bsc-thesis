@@ -1,11 +1,13 @@
 #include <vector>
 #include <fstream>
+#include <memory>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include "drawutils.h"
 #include "button.h"
+#include "gl_compat.h"
 
 #if defined(__ANDROID__)
 #  include <SDL_log.h>
@@ -141,7 +143,7 @@ void drawTexturedQuad(GLuint tex, float x, float y, float w, float h, float u0, 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
-    glUseProgram(0);
+    glCompatReleaseProgram();
 }
 
 void drawColorQuad(float x, float y, float w, float h, const GLfloat* rgba) {
@@ -165,7 +167,7 @@ void drawColorQuad(float x, float y, float w, float h, const GLfloat* rgba) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 4, nullptr);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 4, reinterpret_cast<void*>(sizeof(GLfloat) * 2));
     glBindVertexArray(0);
-    glUseProgram(0);
+    glCompatReleaseProgram();
 }
 
 } // namespace
@@ -242,16 +244,16 @@ void DrawUtils::drawBackground2D(Texture* texture) {
 }
 
 void DrawUtils::drawText(const std::string& text, float x, float y, float scale) {
-    Texture texture(renderText(text, fonts));
-    drawTexture2D(&texture, x, y, scale);
+    std::unique_ptr<Texture> tex(renderText(text, fonts));
+    drawTexture2D(tex.get(), x, y, scale);
 }
 
 void DrawUtils::drawTextInput(const std::string& message, const std::string& input) {
     float scale = 4.0f;
-    Texture texture1(renderText(message, fonts));
-    Texture texture2(renderText(input + "_", fonts));
-    drawTexture2D(&texture1, window->getWidth() / 2 - texture1.getWidth() * scale / 2, window->getHeight() / 2 - texture1.getHeight() * scale / 2 - 32, scale);
-    drawTexture2D(&texture2, window->getWidth() / 2 - texture2.getWidth() * scale / 2, window->getHeight() / 2 - texture2.getHeight() * scale / 2 + 32, scale);
+    std::unique_ptr<Texture> texture1(renderText(message, fonts));
+    std::unique_ptr<Texture> texture2(renderText(input + "_", fonts));
+    drawTexture2D(texture1.get(), window->getWidth() / 2 - texture1->getWidth() * scale / 2, window->getHeight() / 2 - texture1->getHeight() * scale / 2 - 32, scale);
+    drawTexture2D(texture2.get(), window->getWidth() / 2 - texture2->getWidth() * scale / 2, window->getHeight() / 2 - texture2->getHeight() * scale / 2 + 32, scale);
 }
 
 void DrawUtils::drawLabel(Texture* texture) {
@@ -295,10 +297,10 @@ SDL_Surface* loadImage(const std::string& fileName) {
     return surface;
 }
 
-GLuint createTextureFromSurface(SDL_Surface* surface) {
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+Texture* createTextureFromSurface(SDL_Surface* surface) {
+    GLuint texId = 0;
+    glGenTextures(1, &texId);
+    glBindTexture(GL_TEXTURE_2D, texId);
 #if !defined(__ANDROID__)
     glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
 #else
@@ -311,17 +313,18 @@ GLuint createTextureFromSurface(SDL_Surface* surface) {
 #if defined(__ANDROID__)
     glGenerateMipmap(GL_TEXTURE_2D);
 #endif
-    return texture;
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return new Texture(texId, static_cast<float>(surface->w), static_cast<float>(surface->h));
 }
 
-GLuint createTextureFromImage(const std::string& fileName) {
+Texture* createTextureFromImage(const std::string& fileName) {
     SDL_Surface* surface = loadImage(fileName.c_str());
-    GLuint texture = createTextureFromSurface(surface);
+    Texture* t = createTextureFromSurface(surface);
     SDL_FreeSurface(surface);
-    return texture;
+    return t;
 }
 
-GLuint renderText(const std::string& text, SDL_Surface** fonts) {
+Texture* renderText(const std::string& text, SDL_Surface** fonts) {
     SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, 854, 9, 32, SDL_PIXELFORMAT_RGBA32);
     SDL_Rect src = { 0, 0, 9, 9 };
     SDL_Rect dst = { 0, 0, 1000, 9 };
@@ -395,7 +398,7 @@ GLuint renderText(const std::string& text, SDL_Surface** fonts) {
     dst.w = dst.x;  // set width properly
     SDL_Surface* result = SDL_CreateRGBSurfaceWithFormat(0, dst.w, 9, 32, SDL_PIXELFORMAT_RGBA32);
     SDL_BlitSurface(surface, nullptr, result, nullptr);
-    GLuint texture = createTextureFromSurface(result);
+    Texture* texture = createTextureFromSurface(result);
     SDL_FreeSurface(surface);
     SDL_FreeSurface(result);
     return texture;

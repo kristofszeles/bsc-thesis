@@ -1,4 +1,5 @@
 #include <iostream>
+#include <memory>
 
 #include "editor.h"
 
@@ -170,8 +171,8 @@ void Editor::updateCamera() {
 
 void Editor::generateMap() {
 	drawUtils->drawBackground2D(drawUtils->getTextures()->at("background"));
-	Texture texture(renderText("Generating...", drawUtils->getFonts()));
-	drawUtils->drawTexture2D(&texture, drawUtils->getWindow()->getWidth() / 2 - texture.getWidth() * 4 / 2, drawUtils->getWindow()->getHeight() / 2 - texture.getHeight() * 4 / 2, 4);
+	std::unique_ptr<Texture> texture(renderText("Generating...", drawUtils->getFonts()));
+	drawUtils->drawTexture2D(texture.get(), drawUtils->getWindow()->getWidth() / 2 - texture->getWidth() * 4 / 2, drawUtils->getWindow()->getHeight() / 2 - texture->getHeight() * 4 / 2, 4);
 	updateFrame();
 	Maze maze(mapWidth, mapHeight);
 	loadMap(maze.getData());

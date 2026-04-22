@@ -2,6 +2,7 @@
 #include <fstream>
 #include <filesystem>
 #include <vector>
+#include <memory>
 
 #include <SDL_system.h>
 
@@ -102,20 +103,20 @@ void Game::exitGame() {
 }
 
 void Game::loadResources() {
-    addTexture("background", new Texture(createTextureFromImage(assetRoot + "textures/bg.png")));
-    addTexture("select", new Texture(createTextureFromImage(assetRoot + "textures/select.png")));
+    addTexture("background", createTextureFromImage(assetRoot + "textures/bg.png"));
+    addTexture("select", createTextureFromImage(assetRoot + "textures/select.png"));
     fonts.push_back(loadImage(assetRoot + "fonts/numbers.png"));
     fonts.push_back(loadImage(assetRoot + "fonts/uppercase.png"));
     fonts.push_back(loadImage(assetRoot + "fonts/lowercase.png"));
     fonts.push_back(loadImage(assetRoot + "fonts/specials.png"));
-    labels.push_back(new Texture(renderText("3D Maze", fonts.data())));
-    labels.push_back(new Texture(renderText("Game Over", fonts.data())));
-    labels.push_back(new Texture(renderText("Kristof Szeles 2021", fonts.data())));
-    labels.push_back(new Texture(renderText("Loading...", fonts.data())));
-    labels.push_back(new Texture(renderText("Connecting...", fonts.data())));
-    labels.push_back(new Texture(renderText("Choose difficulty", fonts.data())));
-    labels.push_back(new Texture(renderText("Choose vehicle", fonts.data())));
-    labels.push_back(new Texture(renderText("Press SPACE to respawn", fonts.data())));
+    labels.push_back(renderText("3D Maze", fonts.data()));
+    labels.push_back(renderText("Game Over", fonts.data()));
+    labels.push_back(renderText("Kristof Szeles 2021", fonts.data()));
+    labels.push_back(renderText("Loading...", fonts.data()));
+    labels.push_back(renderText("Connecting...", fonts.data()));
+    labels.push_back(renderText("Choose difficulty", fonts.data()));
+    labels.push_back(renderText("Choose vehicle", fonts.data()));
+    labels.push_back(renderText("Press SPACE to respawn", fonts.data()));
 }
 
 void Game::deleteResources() {
@@ -190,8 +191,8 @@ void Game::loadShaders() {
 }
 
 void Game::deleteShaders() {
-    glDeleteShader(m_programID_1);
-    glDeleteShader(m_programID_2);
+    glDeleteProgram(m_programID_1);
+    glDeleteProgram(m_programID_2);
 }
 
 void Game::loadTextures() {
@@ -200,7 +201,7 @@ void Game::loadTextures() {
     maze_android_load_asset_lines(assetRoot + "filelists/textures_root.txt", names);
     for (const auto& rel : names) {
         std::filesystem::path p(rel);
-        Texture* texture = new Texture(createTextureFromImage(assetRoot + rel));
+        Texture* texture = createTextureFromImage(assetRoot + rel);
         addTexture(p.filename().string(), texture);
     }
 #else
@@ -208,7 +209,7 @@ void Game::loadTextures() {
         std::string path = assetRoot + "textures/";
         for (auto& entry : std::filesystem::directory_iterator(path)) {
             if (std::filesystem::is_directory(entry)) continue;
-            Texture* texture = new Texture(createTextureFromImage(entry.path().string()));
+            Texture* texture = createTextureFromImage(entry.path().string());
             addTexture(entry.path().filename().string(), texture);
         }
     }
@@ -221,7 +222,7 @@ void Game::loadSkyboxTextures() {
     maze_android_load_asset_lines(assetRoot + "filelists/skyboxes.txt", names);
     for (const auto& rel : names) {
         std::filesystem::path p(rel);
-        Texture* texture = new Texture(createTextureFromImage(assetRoot + rel));
+        Texture* texture = createTextureFromImage(assetRoot + rel);
         addTexture(p.filename().string(), texture);
         skyboxTextures.push_back(p.filename().string());
     }
@@ -230,7 +231,7 @@ void Game::loadSkyboxTextures() {
         std::string path = assetRoot + "textures/skyboxes/";
         for (auto& entry : std::filesystem::directory_iterator(path)) {
             if (std::filesystem::is_directory(entry)) continue;
-            Texture* texture = new Texture(createTextureFromImage(entry.path().string()));
+            Texture* texture = createTextureFromImage(entry.path().string());
             addTexture(entry.path().filename().string(), texture);
             skyboxTextures.push_back(entry.path().filename().string());
         }
@@ -244,7 +245,7 @@ void Game::loadTileTextures() {
     maze_android_load_asset_lines(assetRoot + "filelists/tiles.txt", names);
     for (const auto& rel : names) {
         std::filesystem::path p(rel);
-        Texture* texture = new Texture(createTextureFromImage(assetRoot + rel));
+        Texture* texture = createTextureFromImage(assetRoot + rel);
         addTexture(p.filename().string(), texture);
         tileTextures.push_back(p.filename().string());
     }
@@ -253,7 +254,7 @@ void Game::loadTileTextures() {
         std::string path = assetRoot + "textures/tiles/";
         for (auto& entry : std::filesystem::directory_iterator(path)) {
             if (std::filesystem::is_directory(entry)) continue;
-            Texture* texture = new Texture(createTextureFromImage(entry.path().string()));
+            Texture* texture = createTextureFromImage(entry.path().string());
             addTexture(entry.path().filename().string(), texture);
             tileTextures.push_back(entry.path().filename().string());
         }
@@ -928,7 +929,7 @@ void Game::drawEntities() {
         }
     }
     for (auto& opponent : map->getOpponents()) {
-        if (!opponent.second->getBillboard()) opponent.second->setBillboard(new Texture(renderText(opponent.second->getName(), fonts.data())));
+        if (!opponent.second->getBillboard()) opponent.second->setBillboard(renderText(opponent.second->getName(), fonts.data()));
         Position pos = opponent.second->getPosition();
         drawBillboard({ pos.x, pos.y + 2.0f, pos.z }, opponent.second->getBillboard());
     }
@@ -953,7 +954,7 @@ void Game::drawMesh(const Position& position, Mesh* mesh, GLuint m_loc) {
     glDrawElements(GL_TRIANGLES, mesh->getIndices().size(), GL_UNSIGNED_INT, 0);
     glCompatBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);  // unbind texture
-    glUseProgram(0);
+    glCompatReleaseProgram();
 }
 
 void Game::drawBillboard(const Position& position, Texture* texture) {
@@ -978,7 +979,7 @@ void Game::drawBillboard(const Position& position, Texture* texture) {
     glDrawElements(GL_TRIANGLES, mesh->getIndices().size(), GL_UNSIGNED_INT, 0);
     glCompatBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);  // unbind texture
-    glUseProgram(0);
+    glCompatReleaseProgram();
     glEnable(GL_DEPTH_TEST);
 }
 
@@ -1002,10 +1003,10 @@ void Game::drawHUD() {
             drawUtils->drawText("Health: " + std::to_string(map->getPlayer()->getHealth()), 32, 80, 4.0f);
         } else {
             drawUtils->drawLabel(labels[1]);
-            Texture texture1(renderText("Your score: " + std::to_string(playerScore), fonts.data()));
-            Texture texture2(renderText("Best score: " + std::to_string(getHighScore()), fonts.data()));
-            drawUtils->drawTexture2D(&texture1, window->getWidth() / 2 - texture1.getWidth() * 4.0f / 2, window->getHeight() / 2 - texture1.getHeight() * 4.0f / 2 + 48, 4.0f);
-            drawUtils->drawTexture2D(&texture2, window->getWidth() / 2 - texture2.getWidth() * 3.5f / 2, window->getHeight() / 2 - texture2.getHeight() * 3.5f / 2 + 96, 3.5f);
+            std::unique_ptr<Texture> texture1(renderText("Your score: " + std::to_string(playerScore), fonts.data()));
+            std::unique_ptr<Texture> texture2(renderText("Best score: " + std::to_string(getHighScore()), fonts.data()));
+            drawUtils->drawTexture2D(texture1.get(), window->getWidth() / 2 - texture1->getWidth() * 4.0f / 2, window->getHeight() / 2 - texture1->getHeight() * 4.0f / 2 + 48, 4.0f);
+            drawUtils->drawTexture2D(texture2.get(), window->getWidth() / 2 - texture2->getWidth() * 3.5f / 2, window->getHeight() / 2 - texture2->getHeight() * 3.5f / 2 + 96, 3.5f);
             drawUtils->drawTexture2D(labels[7], window->getWidth() / 2 - labels[7]->getWidth() * 2.5f / 2, window->getHeight() / 2 - labels[7]->getHeight() * 2.5f / 2 + 192, 2.5f);
         }
     } else if (gameMode == GameMode::MULTIPLAYER) {
@@ -1013,25 +1014,25 @@ void Game::drawHUD() {
         float y = 96;
         for (unsigned int i = 0; i < client->getHighScores().size(); ++i) {
             float scale = 3.0f;
-            Texture texture(renderText(std::to_string(i + 1) + ". " + client->getHighScores().at(i).first + ": " + std::to_string(client->getHighScores().at(i).second), fonts.data()));
-            drawUtils->drawTexture2D(&texture, 32, y, scale);
-            y += texture.getHeight() * scale + 8;
+            std::unique_ptr<Texture> texture(renderText(std::to_string(i + 1) + ". " + client->getHighScores().at(i).first + ": " + std::to_string(client->getHighScores().at(i).second), fonts.data()));
+            drawUtils->drawTexture2D(texture.get(), 32, y, scale);
+            y += texture->getHeight() * scale + 8;
         }
         y = window->getHeight() - 64.0f;
         for (int i = client->getChatMessages().size(); i > 0 && i > (int)client->getChatMessages().size() - 6; --i) {
             unsigned int expiration = client->getChatMessages().at(i - 1).second;
             if (expiration < SDL_GetTicks()) continue;
             float scale = 2.0f;
-            Texture texture(renderText(client->getChatMessages().at(i - 1).first, fonts.data()));
-            drawUtils->drawTexture2D(&texture, 32, y, scale);
-            y -= texture.getHeight() * scale + 8;
+            std::unique_ptr<Texture> texture(renderText(client->getChatMessages().at(i - 1).first, fonts.data()));
+            drawUtils->drawTexture2D(texture.get(), 32, y, scale);
+            y -= texture->getHeight() * scale + 8;
         }
         if (chatMode) drawUtils->drawText("> " + inputText + "_", 32, window->getHeight() - 32.0f, 2.0f);
     }
     if (map->getPlayer()->getPotionExpiration() != 0) {
         float scale = 3.0f;
-        Texture texture(renderText(map->getPlayer()->getPotionName() + ": " + std::to_string(map->getPlayer()->getPotionExpiration() - time(nullptr)), fonts.data()));
-        drawUtils->drawTexture2D(&texture, window->getWidth() - texture.getWidth() * scale - 32.0f, 32, scale);
+        std::unique_ptr<Texture> texture(renderText(map->getPlayer()->getPotionName() + ": " + std::to_string(map->getPlayer()->getPotionExpiration() - time(nullptr)), fonts.data()));
+        drawUtils->drawTexture2D(texture.get(), window->getWidth() - texture->getWidth() * scale - 32.0f, 32, scale);
     }
     setDrawModePerspective();
 }

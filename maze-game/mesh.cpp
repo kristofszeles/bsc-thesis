@@ -96,7 +96,11 @@ void Mesh::loadOBJ(const std::string& path) {
         } else if (type == "texture") {
             std::string fileName;
             ss >> fileName;
-            setTexture(createTextureFromImage(fileName));
+            {
+                Texture* tex = createTextureFromImage(fileName);
+                setTexture(tex->release());
+                delete tex;
+            }
         }
     }
     file.close();

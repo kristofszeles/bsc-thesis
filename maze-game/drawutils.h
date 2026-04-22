@@ -35,6 +35,6 @@ public:
 };
 
 SDL_Surface* loadImage(const std::string& fileName);
-GLuint createTextureFromSurface(SDL_Surface* surface);
-GLuint createTextureFromImage(const std::string& fileName);
-GLuint renderText(const std::string& text, SDL_Surface** fonts);
+Texture* createTextureFromSurface(SDL_Surface* surface);
+Texture* createTextureFromImage(const std::string& fileName);
+Texture* renderText(const std::string& text, SDL_Surface** fonts);
