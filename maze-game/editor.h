@@ -64,6 +64,9 @@ private:
 	void updateSelectedTileTexture() { selectedTileTexture = std::find(tileTextures.begin(), tileTextures.end(), tileTexture) - tileTextures.begin(); }
 	void handleMouse();
 	void initButtons();
+#if defined(__ANDROID__)
+	void syncAndroidTextInputState();
+#endif
 public:
 	Editor(DrawUtils* drawUtils = nullptr);
 	~Editor();

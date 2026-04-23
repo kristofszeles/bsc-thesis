@@ -3,7 +3,21 @@
 
 #include "editor.h"
 
+#if defined(__ANDROID__)
+#include <SDL_hints.h>
+static bool keyIsBackOrEscape(const SDL_Keysym& keysym) {
+	return keysym.sym == SDLK_ESCAPE || keysym.sym == SDLK_AC_BACK || keysym.scancode == SDL_SCANCODE_AC_BACK;
+}
+#else
+static bool keyIsBackOrEscape(const SDL_Keysym& keysym) {
+	return keysym.sym == SDLK_ESCAPE;
+}
+#endif
+
 Editor::Editor(DrawUtils* drawUtils) : drawUtils(drawUtils) {
+#if defined(__ANDROID__)
+	SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+#endif
 	selectedBlock = nullptr;
 	start = nullptr;
 	finish = nullptr;
@@ -24,6 +38,11 @@ Editor::Editor(DrawUtils* drawUtils) : drawUtils(drawUtils) {
 }
 
 Editor::~Editor() {
+#if defined(__ANDROID__)
+	if (SDL_IsTextInputActive()) {
+		SDL_StopTextInput();
+	}
+#endif
 	for (auto& block : blocks) delete block;
 	for (auto& button : buttons) delete button;
 }
@@ -55,8 +74,37 @@ void Editor::run() {
 		}
 		if (!showInput) handleMouse();
 		updateFrame();
+#if defined(__ANDROID__)
+		syncAndroidTextInputState();
+#endif
 	}
 }
+
+#if defined(__ANDROID__)
+void Editor::syncAndroidTextInputState() {
+	Window* win = drawUtils->getWindow();
+	if (!win || !win->getWindow()) return;
+	if (showInput) {
+		if (!SDL_IsTextInputActive()) {
+			SDL_StartTextInput();
+		}
+		int w = win->getWidth();
+		int h = win->getHeight();
+		if (w < 1) w = 1;
+		if (h < 1) h = 1;
+		SDL_Rect r;
+		r.x = 0;
+		r.y = (int)(h * 0.35f);
+		r.w = w;
+		r.h = (int)(h * 0.30f);
+		SDL_SetTextInputRect(&r);
+	} else {
+		if (SDL_IsTextInputActive()) {
+			SDL_StopTextInput();
+		}
+	}
+}
+#endif
 
 void Editor::newMap() {
 	mapWidth = 0;
@@ -263,7 +311,7 @@ int Editor::handleEvents() {
 			break;
 		case SDL_KEYDOWN:
 			if (showInput) {
-				if (event.key.keysym.sym == SDLK_ESCAPE) {
+				if (keyIsBackOrEscape(event.key.keysym)) {
 					showInput = false;
 					inputText = "";
 					break;
@@ -289,9 +337,10 @@ int Editor::handleEvents() {
 					}
 				}
 			} else {
-				switch (event.key.keysym.sym) {
-				case SDLK_ESCAPE:
+				if (keyIsBackOrEscape(event.key.keysym)) {
 					return 5;
+				}
+				switch (event.key.keysym.sym) {
 				case SDLK_F1:
 					return 1;
 				case SDLK_F2:

@@ -4,10 +4,23 @@
 #include <filesystem>
 #include <vector>
 #include <memory>
+#include <cmath>
 
 #include <SDL_system.h>
+#include <SDL_hints.h>
+#include <SDL_touch.h>
 
 #include "game.h"
+
+#if defined(__ANDROID__)
+static bool keyIsBackOrEscape(const SDL_Keysym& keysym) {
+    return keysym.sym == SDLK_ESCAPE || keysym.sym == SDLK_AC_BACK || keysym.scancode == SDL_SCANCODE_AC_BACK;
+}
+#else
+static bool keyIsBackOrEscape(const SDL_Keysym& keysym) {
+    return keysym.sym == SDLK_ESCAPE;
+}
+#endif
 #if !defined(__ANDROID__)
 #include <nfd.hpp>
 #endif
@@ -49,6 +62,7 @@ Game::Game() {
         exit(1);
     }
 #if defined(__ANDROID__)
+    SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
     {
         // SDL_GetBasePath is unsupported on Android; asset paths are relative to the APK asset root.
         assetRoot.clear();
@@ -79,6 +93,9 @@ Game::Game() {
     quit = false;
     relativeMouseMode = false;
     chatMode = false;
+#if defined(__ANDROID__)
+    resetAndroidTouchKeyGestures();
+#endif
     screen = Screen::MENU;
     subMenu = SubMenu::MAIN;
     gameMode = GameMode::IN_MENU;
@@ -101,6 +118,11 @@ Game::~Game() {
     client->disconnectFromServer();
     client->join();
     delete client;
+#if defined(__ANDROID__)
+    if (SDL_IsTextInputActive()) {
+        SDL_StopTextInput();
+    }
+#endif
     delete window;
     delete camera;
     delete drawUtils;
@@ -345,7 +367,9 @@ void Game::run() {
                     if (std::filesystem::exists(lastMapPath())) {
                         gameMode = GameMode::SINGLE_PLAYER;
                         screen = Screen::GAME;
+#if !defined(__ANDROID__)
                         setRelativeMouseMode(true);
+#endif
                         deleteMenu();
                         camera->reset();
                         loadMap(lastMapPath());
@@ -409,7 +433,9 @@ void Game::run() {
                         loadReceivedMap();
                         screen = Screen::GAME;
                         gameMode = GameMode::MULTIPLAYER;
+#if !defined(__ANDROID__)
                         setRelativeMouseMode(true);
+#endif
                         deleteMenu();
                         setDrawModePerspective();
                         client->start();
@@ -446,7 +472,9 @@ void Game::run() {
                     mazeHeight = config->getData()["maze"][difficulty]["height"];
                     screen = Screen::GAME;
                     gameMode = GameMode::SINGLE_PLAYER;
+#if !defined(__ANDROID__)
                     setRelativeMouseMode(true);
+#endif
                     deleteMenu();
                     camera->reset();
                     generateMap(mazeWidth, mazeHeight);
@@ -497,6 +525,9 @@ void Game::run() {
                 subMenu = SubMenu::MAIN;
                 gameMode = GameMode::IN_MENU;
                 setRelativeMouseMode(false);
+#if defined(__ANDROID__)
+                resetAndroidTouchKeyGestures();
+#endif
             }
         } else if (screen == Screen::EDITOR) {
             SDL_GL_SetSwapInterval(0); // disable vsync
@@ -506,8 +537,47 @@ void Game::run() {
             screen = Screen::MENU;
             subMenu = SubMenu::MAIN;
         }
+#if defined(__ANDROID__)
+        syncAndroidTextInputState();
+#endif
     }
 }
+
+#if defined(__ANDROID__)
+void Game::syncAndroidTextInputState() {
+    if (!window || !window->getWindow()) return;
+    const bool needOnScreenKeyboard =
+        (screen == Screen::MENU
+            && (subMenu == SubMenu::ENTER_PLAYER_NAME || subMenu == SubMenu::ENTER_SERVER_ADDRESS))
+        || (screen == Screen::GAME && chatMode);
+    if (needOnScreenKeyboard) {
+        if (!SDL_IsTextInputActive()) {
+            SDL_StartTextInput();
+        }
+        int w = window->getWidth();
+        int h = window->getHeight();
+        if (w < 1) w = 1;
+        if (h < 1) h = 1;
+        SDL_Rect r;
+        if (screen == Screen::GAME && chatMode) {
+            r.x = 0;
+            r.y = (int)(h * 0.65f);
+            r.w = w;
+            r.h = h - r.y;
+        } else {
+            r.x = 0;
+            r.y = (int)(h * 0.35f);
+            r.w = w;
+            r.h = (int)(h * 0.30f);
+        }
+        SDL_SetTextInputRect(&r);
+    } else {
+        if (SDL_IsTextInputActive()) {
+            SDL_StopTextInput();
+        }
+    }
+}
+#endif
 
 Game::MapEvent Game::handleMapEvents() {
     SDL_Event event;
@@ -517,6 +587,9 @@ Game::MapEvent Game::handleMapEvents() {
             exitGame();
             break;
         case SDL_MOUSEMOTION: {
+#if defined(__ANDROID__)
+            if (event.motion.which == SDL_TOUCH_MOUSEID) break;
+#endif
             if (relativeMouseMode) {
                 float mouseSensitivity = config->getData()["game"]["mouseSensitivity"];
                 if (mouseSensitivity < 0.1f) mouseSensitivity = 0.1f;
@@ -533,10 +606,12 @@ Game::MapEvent Game::handleMapEvents() {
             }
             break;
         case SDL_MOUSEBUTTONDOWN:
+#if !defined(__ANDROID__)
             if (event.button.button == SDL_BUTTON_RIGHT) {
                 relativeMouseMode = 1 - relativeMouseMode;
                 setRelativeMouseMode(relativeMouseMode);
             }
+#endif
             break;
         case SDL_KEYDOWN:
             if (event.key.keysym.sym == SDLK_SPACE) {
@@ -551,7 +626,7 @@ Game::MapEvent Game::handleMapEvents() {
                 else camera->setMode(0);
             }
             else if (event.key.keysym.sym == SDLK_F11) window->toggleMaximized();
-            else if (event.key.keysym.sym == SDLK_ESCAPE) {
+            else if (keyIsBackOrEscape(event.key.keysym)) {
                 if (chatMode) chatMode = false;
                 else return MapEvent::MAP_PRESS_ESCAPE;
             }
@@ -595,6 +670,39 @@ Game::MapEvent Game::handleMapEvents() {
                 if (inputText.size() < 24) inputText += character;
             }
             break;
+#if defined(__ANDROID__)
+        case SDL_FINGERDOWN:
+            if (map->isGameOver()) {
+                const float w = (float)window->getWidth();
+                const float h = (float)window->getHeight();
+                const float px = event.tfinger.x * w;
+                const float py = event.tfinger.y * h;
+                if (px > w * 0.2f && px < w * 0.8f && py > h * 0.2f && py < h * 0.8f) {
+                    config->getData()["game"]["singlePlayer"]["highScore"] = getHighScore();
+                    setPlayerScore(0);
+                    deleteMap();
+                    generateMap(mazeWidth, mazeHeight);
+                    resetAndroidTouchKeyGestures();
+                }
+                break;
+            }
+            androidFeedFingerEdgeKeyGesture(event);
+            break;
+        case SDL_FINGERUP:
+            if (map->isGameOver()) break;
+            {
+                const int k = androidFeedFingerEdgeKeyGesture(event);
+                if (k == 1) {
+                    if (chatMode && !inputText.empty()) {
+                        client->sendChatMessage(inputText);
+                        chatMode = false;
+                    }
+                }
+            }
+            break;
+        case SDL_FINGERMOTION:
+            break;
+#endif
         }
     }
     return MapEvent::NO_EVENT;
@@ -665,7 +773,7 @@ int Game::handleMenuEvents() {
             }
             break;
         case SDL_KEYDOWN:
-            if (event.key.keysym.sym == SDLK_ESCAPE) return MenuEvent::MENU_PRESS_ESCAPE;
+            if (keyIsBackOrEscape(event.key.keysym)) return MenuEvent::MENU_PRESS_ESCAPE;
             else if (event.key.keysym.sym == SDLK_RETURN || event.key.keysym.sym == SDLK_KP_ENTER) return MenuEvent::MENU_PRESS_ENTER;
             else if (event.key.keysym.sym == SDLK_F11) window->toggleMaximized();
             else if (event.key.keysym.sym == SDLK_LEFT) {
@@ -701,6 +809,18 @@ int Game::handleMenuEvents() {
                 if (inputText.size() < 24) inputText += character;
             }
             break;
+#if defined(__ANDROID__)
+        case SDL_FINGERDOWN:
+            androidFeedFingerEdgeKeyGesture(event);
+            break;
+        case SDL_FINGERUP: {
+            const int k = androidFeedFingerEdgeKeyGesture(event);
+            if (k == 1) return MenuEvent::MENU_PRESS_ENTER;
+            break;
+        }
+        case SDL_FINGERMOTION:
+            break;
+#endif
         }
     }
     return clickedButtonIndex;
@@ -1096,6 +1216,44 @@ void Game::setRelativeMouseMode(bool mode) {
     if (relativeMouseMode) SDL_SetRelativeMouseMode(SDL_TRUE);
     else SDL_SetRelativeMouseMode(SDL_FALSE);
 }
+
+#if defined(__ANDROID__)
+void Game::resetAndroidTouchKeyGestures() {
+    androidEdgeActive = false;
+    androidEdgeFingerId = 0;
+    androidEdgeStartX = androidEdgeStartY = 0.0f;
+}
+
+// Optional touch equivalent of Enter: right-edge pull. Back uses the system SDLK_AC_BACK / trap hint.
+// Returns: 0 = none, 1 = Enter.
+int Game::androidFeedFingerEdgeKeyGesture(const SDL_Event& event) {
+    if (event.type != SDL_FINGERDOWN && event.type != SDL_FINGERUP) return 0;
+    const float w = (float)window->getWidth();
+    const float h = (float)window->getHeight();
+    if (w < 1.0f || h < 1.0f) return 0;
+    const float px = event.tfinger.x * w;
+    const float py = event.tfinger.y * h;
+    if (event.type == SDL_FINGERDOWN) {
+        if (androidEdgeActive) return 0;
+        if (px > w * 0.88f) {
+            androidEdgeActive = true;
+            androidEdgeFingerId = event.tfinger.fingerId;
+            androidEdgeStartX = px;
+            androidEdgeStartY = py;
+        }
+        return 0;
+    }
+    if (event.type == SDL_FINGERUP) {
+        if (!androidEdgeActive || event.tfinger.fingerId != androidEdgeFingerId) return 0;
+        androidEdgeActive = false;
+        const float dx = px - androidEdgeStartX;
+        const float dy = py - androidEdgeStartY;
+        const float minPull = std::fmax(40.0f, 0.06f * w);
+        if (-dx > minPull && std::fabs(dy) < 0.2f * h) return 1;
+    }
+    return 0;
+}
+#endif
 
 int Game::getHighScore() const {
     if (playerScore > (int)config->getData()["game"]["singlePlayer"]["highScore"]) return playerScore;

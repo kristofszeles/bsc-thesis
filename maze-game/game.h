@@ -97,6 +97,14 @@ private:
     void addPlayerScore(int amount) { playerScore += amount; }
     void setPlayerScore(int amount) { playerScore = amount; }
     int getHighScore() const;
+#if defined(__ANDROID__)
+    void syncAndroidTextInputState();
+    void resetAndroidTouchKeyGestures();
+    int androidFeedFingerEdgeKeyGesture(const SDL_Event& event);
+    bool androidEdgeActive;
+    SDL_FingerID androidEdgeFingerId;
+    float androidEdgeStartX, androidEdgeStartY;
+#endif
     GLuint loadShader(GLenum shaderType, std::string shaderData);
     GLuint linkShaders(const std::string& vertexShader, const std::string& fragmentShader);
     std::string getRandomSkyboxTexture() const {
