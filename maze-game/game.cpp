@@ -663,13 +663,14 @@ Game::MapEvent Game::handleMapEvents() {
                 window->setProjectionMatrixSize(event.window.data1, event.window.data2);
             }
             break;
-        case SDL_TEXTINPUT:
+        case SDL_TEXTINPUT: {
             if (!chatMode) break;
             char character = event.text.text[0];
             if ((character >= '0' && character <= '9') || (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || character == '!' || character == '?' || character == '.' || character == ':' || character == ' ' || character == '_' || character == '-') {
                 if (inputText.size() < 24) inputText += character;
             }
             break;
+        }
 #if defined(__ANDROID__)
         case SDL_FINGERDOWN:
             if (map->isGameOver()) {
@@ -803,12 +804,13 @@ int Game::handleMenuEvents() {
                 window->setProjectionMatrixSize(event.window.data1, event.window.data2);
             }
             break;
-        case SDL_TEXTINPUT:
+        case SDL_TEXTINPUT: {
             char character = event.text.text[0];
             if ((character >= '0' && character <= '9') || (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || character == '!' || character == '?' || character == '.' || character == ':' || character == ' ' || character == '_' || character == '-') {
                 if (inputText.size() < 24) inputText += character;
             }
             break;
+        }
 #if defined(__ANDROID__)
         case SDL_FINGERDOWN:
             androidFeedFingerEdgeKeyGesture(event);
