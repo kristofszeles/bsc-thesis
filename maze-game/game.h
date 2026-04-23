@@ -99,8 +99,18 @@ private:
     int getHighScore() const;
     GLuint loadShader(GLenum shaderType, std::string shaderData);
     GLuint linkShaders(const std::string& vertexShader, const std::string& fragmentShader);
-    std::string getRandomSkyboxTexture() const { return skyboxTextures[rand() % skyboxTextures.size()]; }
-    std::string getRandomTileTexture() const { return tileTextures[rand() % tileTextures.size()]; }
+    std::string getRandomSkyboxTexture() const {
+        if (skyboxTextures.empty()) {
+            return "skybox1.png";
+        }
+        return skyboxTextures[static_cast<size_t>(rand()) % skyboxTextures.size()];
+    }
+    std::string getRandomTileTexture() const {
+        if (tileTextures.empty()) {
+            return "Tile1.png";
+        }
+        return tileTextures[static_cast<size_t>(rand()) % tileTextures.size()];
+    }
 public:
     Game();
     ~Game();

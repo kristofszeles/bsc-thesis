@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <filesystem>
 #include <vector>
 #include <memory>
@@ -18,11 +19,25 @@
 
 #if defined(__ANDROID__)
 static void maze_android_load_asset_lines(const std::string& path, std::vector<std::string>& out) {
-    std::ifstream f(path);
+    // APK assets are not ordinary filesystem paths; std::ifstream fails. SDL_LoadFile uses the same
+    // asset resolution as IMG_Load and the rest of the Android port.
+    size_t datasize = 0;
+    void* raw = SDL_LoadFile(path.c_str(), &datasize);
+    if (!raw) {
+        SDL_Log("maze_android_load_asset_lines: could not open %s: %s", path.c_str(), SDL_GetError());
+        return;
+    }
+    const char* buf = static_cast<const char*>(raw);
+    std::string content(buf, buf + datasize);
+    SDL_free(raw);
+    std::istringstream stream(content);
     std::string line;
-    while (std::getline(f, line)) {
+    while (std::getline(stream, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
         if (!line.empty()) {
-            out.push_back(line);
+            out.push_back(std::move(line));
         }
     }
 }

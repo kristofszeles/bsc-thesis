@@ -1,6 +1,9 @@
 #include "mesh.h"
 #include "drawutils.h"
 
+#include <SDL.h>
+#include <cstdlib>
+
 Mesh::Mesh() {
     m_vaoID = 0;
     m_vboID = 0;
@@ -39,15 +42,34 @@ void Mesh::init() {
 }
 
 void Mesh::loadOBJ(const std::string& path) {
-    std::ifstream file;
-    file.open(path);
+    size_t datasize = 0;
+    void* raw = SDL_LoadFile(path.c_str(), &datasize);
+    if (!raw) {
+        const char* err = SDL_GetError();
+        std::string msg = path;
+        if (err && err[0]) {
+            msg += "\n";
+            msg += err;
+        }
+        SDL_Log("Mesh::loadOBJ: could not open %s: %s", path.c_str(), err ? err : "");
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "loadOBJ", msg.c_str(), nullptr);
+        exit(1);
+    }
+    const char* buf = static_cast<const char*>(raw);
+    std::string fileContent(buf, buf + datasize);
+    SDL_free(raw);
+
+    std::istringstream file(fileContent);
     std::string line;
     int indexedVerts = 0;
     float maxX = 0, minX = 0, maxY = 0, minY = 0, maxZ = 0, minZ = 0;
     std::vector<glm::vec3> positions;
     std::vector<glm::vec3> normals;
     std::vector<glm::vec2> texCoords;
-    while (getline(file, line)) {
+    while (std::getline(file, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
         std::istringstream ss;
         std::string type;
         ss.str(line);
@@ -103,7 +125,6 @@ void Mesh::loadOBJ(const std::string& path) {
             }
         }
     }
-    file.close();
     setWidth(std::abs(maxX - minX));
     setHeight(std::abs(maxY - minY));
     setDepth(std::abs(maxZ - minZ));
