@@ -59,6 +59,10 @@ private:
     MapEvent handleMapEvents();
     void handleMapKeyState();
     int handleMenuEvents();
+    void changeChooseVehicleBy(int delta);
+    void menuChooseVehicleGetArrowButtonLayout(bool left, float& outX, float& outY, float& outS) const;
+    int menuPointHitsChooseVehicleArrow(float px, float py) const;
+    void drawMenuChooseVehicleArrows();
     void runAutoPlay();
     void runEntities();
     void handleCollisions();
@@ -74,6 +78,8 @@ private:
     void addVehicleMesh(const std::string& key, Mesh* mesh) { vehicleMeshes.insert({ key, mesh }); }
     void initMenu();
     void deleteMenu();
+    void gameMapApplyEnterAction();
+    int menuApplyPointerUpAt(float px, float py);
     void loadTileTextures();
     void loadSkyboxTextures();
     void openMap();
@@ -94,16 +100,46 @@ private:
     void setDrawModeOrtho();
     void setDrawModePerspective();
     void setRelativeMouseMode(bool mode);
+    void toggleCameraViewF2();
     void addPlayerScore(int amount) { playerScore += amount; }
     void setPlayerScore(int amount) { playerScore = amount; }
     int getHighScore() const;
 #if defined(__ANDROID__)
     void syncAndroidTextInputState();
+    void androidSetTextInputRect();
+    void androidRequestScreenKeyboardOnTap();
+    void androidDismissChatAndKeyboard();
     void resetAndroidTouchKeyGestures();
-    int androidFeedFingerEdgeKeyGesture(const SDL_Event& event);
-    bool androidEdgeActive;
-    SDL_FingerID androidEdgeFingerId;
-    float androidEdgeStartX, androidEdgeStartY;
+    bool androidLookTouchActive;
+    SDL_FingerID androidLookFingerId;
+    void androidDpadGetLayout(float& outX, float& outY, float& outSize, float& outCell) const;
+    bool androidDpadBoxContainsPoint(float px, float py) const;
+    // When `allowSlop` is true (finger move while d-pad held), tolerate slight thumb drift
+    // off the bottom edge of the pad so "down" does not spuriously clear when held.
+    int androidDpadDirectionAtPoint(float px, float py, bool allowSlop = false) const;
+    void drawAndroidDpadOverlays();
+    void androidGetViewToggleButtonLayout(float& outX, float& outY, float& outS) const;
+    bool androidViewToggleContainsPoint(float px, float py) const;
+    void drawAndroidViewToggleButton();
+    void androidToggleViewFromPointer();
+    void androidGetChatButtonLayout(float& outX, float& outY, float& outS) const;
+    bool androidChatButtonContainsPoint(float px, float py) const;
+    void drawAndroidChatButton();
+    void androidOpenChatFromPointer();
+    bool androidDpadActive;
+    int androidDpadDir;
+    SDL_FingerID androidDpadFingerId;
+    bool androidEnterTapActive;
+    SDL_FingerID androidEnterTapFingerId;
+    float androidEnterTapStartX, androidEnterTapStartY;
+    Uint32 androidEnterTapStartTicks;
+    float androidPinchLastDist;
+    void androidOnTwoFingerStateForMap(SDL_TouchID touchIdFromEvent);
+    bool androidUpdatePinchZoom(SDL_TouchID touchIdFromEvent);
+    bool androidMenuEnterTapActive;
+    SDL_FingerID androidMenuEnterTapFingerId;
+    float androidMenuEnterTapX, androidMenuEnterTapY;
+    Uint32 androidMenuEnterTapStartTicks;
 #endif
     GLuint loadShader(GLenum shaderType, std::string shaderData);
     GLuint linkShaders(const std::string& vertexShader, const std::string& fragmentShader);
