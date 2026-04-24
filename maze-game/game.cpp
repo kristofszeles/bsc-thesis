@@ -1374,19 +1374,34 @@ void Game::drawMenu() {
         drawUtils->drawTextInput("Enter server address: ", inputText);
     } else if (subMenu == SubMenu::CONNECTING) {
         drawUtils->drawBackground2D(textures["background"]);
-        drawUtils->drawLabel(labels[4]);
+        drawUtils->drawLabel(labels[4], 6.0f * kInGameTextScale);
     } else if (subMenu == SubMenu::CHOOSE_DIFFICULTY) {
         drawUtils->drawBackground2D(textures["background"]);
-        drawUtils->drawTexture2D(labels[5], window->getWidth() / 2 - labels[5]->getWidth() * 5 / 2, window->getHeight() / 2 - labels[5]->getHeight() * 5 - 100, 5);
+        {
+            const float ms = 5.0f * kInGameTextScale;
+            drawUtils->drawTexture2D(
+                labels[5],
+                window->getWidth() / 2 - labels[5]->getWidth() * ms / 2.0f,
+                window->getHeight() / 2.0f - labels[5]->getHeight() * ms - 100.0f * kInGameTextScale,
+                ms);
+        }
         drawUtils->drawButtonGroup(menu->getButtonGroup2());
     } else if (subMenu == SubMenu::CHOOSE_VEHICLE) {
         drawUtils->drawBackground2D(textures["background"]);
-        drawUtils->drawTexture2D(labels[6], window->getWidth() / 2 - labels[6]->getWidth() * 5 / 2, window->getHeight() / 2 - labels[6]->getHeight() * 5 - 100, 5);
+        {
+            const float ms = 5.0f * kInGameTextScale;
+            drawUtils->drawTexture2D(
+                labels[6],
+                window->getWidth() / 2 - labels[6]->getWidth() * ms / 2.0f,
+                window->getHeight() / 2.0f - labels[6]->getHeight() * ms - 100.0f * kInGameTextScale,
+                ms);
+        }
         camera->setMode(2);
         setDrawModePerspective();
         Position pos(0, -1, -2, menu->getVehicleAngle());
         drawMesh(pos, vehicleMeshes.at(vehicles[config->getData()["game"]["vehicle"]]), m_programID_2);
         setDrawModeOrtho();
+        drawMenuChooseVehicleArrows();
     }
 }
 
@@ -1496,50 +1511,88 @@ void Game::drawFloor() {
 
 void Game::drawHUD() {
     setDrawModeOrtho();
+    const float g = kInGameTextScale;
     if (gameMode == GameMode::SINGLE_PLAYER) {
         if (!map->isGameOver()) {
-            drawUtils->drawText("Score: " + std::to_string(playerScore), 32, 32, 4.0f);
-            drawUtils->drawText("Health: " + std::to_string(map->getPlayer()->getHealth()), 32, 80, 4.0f);
+            drawUtils->drawText("Score: " + std::to_string(playerScore), 32, 32, 4.0f * g);
+            drawUtils->drawText("Health: " + std::to_string(map->getPlayer()->getHealth()), 32, 32.0f + 48.0f * g, 4.0f * g);
         } else {
-            drawUtils->drawLabel(labels[1]);
+            drawUtils->drawLabel(labels[1], 6.0f * g);
             std::unique_ptr<Texture> texture1(renderText("Your score: " + std::to_string(playerScore), fonts.data()));
             std::unique_ptr<Texture> texture2(renderText("Best score: " + std::to_string(getHighScore()), fonts.data()));
-            drawUtils->drawTexture2D(texture1.get(), window->getWidth() / 2 - texture1->getWidth() * 4.0f / 2, window->getHeight() / 2 - texture1->getHeight() * 4.0f / 2 + 48, 4.0f);
-            drawUtils->drawTexture2D(texture2.get(), window->getWidth() / 2 - texture2->getWidth() * 3.5f / 2, window->getHeight() / 2 - texture2->getHeight() * 3.5f / 2 + 96, 3.5f);
-            drawUtils->drawTexture2D(labels[7], window->getWidth() / 2 - labels[7]->getWidth() * 2.5f / 2, window->getHeight() / 2 - labels[7]->getHeight() * 2.5f / 2 + 192, 2.5f);
+            const float s1 = 4.0f * g;
+            const float s2 = 3.5f * g;
+            const float s3 = 2.5f * g;
+            drawUtils->drawTexture2D(texture1.get(), window->getWidth() / 2 - texture1->getWidth() * s1 / 2, window->getHeight() / 2 - texture1->getHeight() * s1 / 2 + 48.0f * g, s1);
+            drawUtils->drawTexture2D(texture2.get(), window->getWidth() / 2 - texture2->getWidth() * s2 / 2, window->getHeight() / 2 - texture2->getHeight() * s2 / 2 + 96.0f * g, s2);
+            drawUtils->drawTexture2D(labels[7], window->getWidth() / 2 - labels[7]->getWidth() * s3 / 2, window->getHeight() / 2 - labels[7]->getHeight() * s3 / 2 + 192.0f * g, s3);
         }
     } else if (gameMode == GameMode::MULTIPLAYER) {
-        drawUtils->drawText("High Scores", 32, 32, 4.0f);
-        float y = 96;
+        drawUtils->drawText("High Scores", 32, 32, 4.0f * g);
+        float y = 32.0f + 64.0f * g;
         for (unsigned int i = 0; i < client->getHighScores().size(); ++i) {
-            float scale = 3.0f;
+            float scale = 3.0f * g;
             std::unique_ptr<Texture> texture(renderText(std::to_string(i + 1) + ". " + client->getHighScores().at(i).first + ": " + std::to_string(client->getHighScores().at(i).second), fonts.data()));
             drawUtils->drawTexture2D(texture.get(), 32, y, scale);
-            y += texture->getHeight() * scale + 8;
+            y += texture->getHeight() * scale + 8.0f * g;
         }
-        y = window->getHeight() - 64.0f;
+#if defined(__ANDROID__)
+        float dpx, dpy, dps, dpcell;
+        androidDpadGetLayout(dpx, dpy, dps, dpcell);
+        (void)dpx;
+        (void)dpcell;
+        const float chatBottom = dpy - 12.0f * g;
+        const float chatPanelTop = fmaxf(100.0f, chatBottom - 220.0f * g);
+        const float gapAboveDpad = 12.0f * g;
+        const float inputLineH = 40.0f * g;
+        const float yInput = dpy - gapAboveDpad - inputLineH;
+        y = yInput - 10.0f * g;
         for (int i = client->getChatMessages().size(); i > 0 && i > (int)client->getChatMessages().size() - 6; --i) {
             unsigned int expiration = client->getChatMessages().at(i - 1).second;
             if (expiration < SDL_GetTicks()) continue;
-            float scale = 2.0f;
+            float scale = 2.0f * g;
+            std::unique_ptr<Texture> texture(renderText(client->getChatMessages().at(i - 1).first, fonts.data()));
+            if (y < chatPanelTop + 6.0f * g) break;
+            drawUtils->drawTexture2D(texture.get(), 24, y, scale);
+            y -= texture->getHeight() * scale + 8.0f * g;
+        }
+        if (chatMode) {
+            drawUtils->drawText("> " + inputText + "_", 24, yInput, 2.0f * g);
+        }
+#else
+        y = window->getHeight() - 64.0f * g;
+        for (int i = client->getChatMessages().size(); i > 0 && i > (int)client->getChatMessages().size() - 6; --i) {
+            unsigned int expiration = client->getChatMessages().at(i - 1).second;
+            if (expiration < SDL_GetTicks()) continue;
+            float scale = 2.0f * g;
             std::unique_ptr<Texture> texture(renderText(client->getChatMessages().at(i - 1).first, fonts.data()));
             drawUtils->drawTexture2D(texture.get(), 32, y, scale);
-            y -= texture->getHeight() * scale + 8;
+            y -= texture->getHeight() * scale + 8.0f * g;
         }
-        if (chatMode) drawUtils->drawText("> " + inputText + "_", 32, window->getHeight() - 32.0f, 2.0f);
+        if (chatMode) drawUtils->drawText("> " + inputText + "_", 32, window->getHeight() - 32.0f * g, 2.0f * g);
+#endif
     }
     if (map->getPlayer()->getPotionExpiration() != 0) {
-        float scale = 3.0f;
+        float scale = 3.0f * g;
         std::unique_ptr<Texture> texture(renderText(map->getPlayer()->getPotionName() + ": " + std::to_string(map->getPlayer()->getPotionExpiration() - time(nullptr)), fonts.data()));
         drawUtils->drawTexture2D(texture.get(), window->getWidth() - texture->getWidth() * scale - 32.0f, 32, scale);
     }
+#if defined(__ANDROID__)
+    if (!map->isGameOver()) {
+        drawAndroidDpadOverlays();
+        if (gameMode == GameMode::MULTIPLAYER) {
+            drawAndroidChatButton();
+        }
+        drawAndroidViewToggleButton();
+    }
+#endif
     setDrawModePerspective();
 }
 
 void Game::drawLoadingScreen() {
     setDrawModeOrtho();
     drawUtils->drawBackground2D(textures["background"]);
-    drawUtils->drawLabel(labels[3]);
+    drawUtils->drawLabel(labels[3], 6.0f * kInGameTextScale);
     SDL_GL_SwapWindow(window->getWindow());
     setDrawModePerspective();
 }
@@ -1581,42 +1634,326 @@ void Game::setRelativeMouseMode(bool mode) {
     else SDL_SetRelativeMouseMode(SDL_FALSE);
 }
 
-#if defined(__ANDROID__)
-void Game::resetAndroidTouchKeyGestures() {
-    androidEdgeActive = false;
-    androidEdgeFingerId = 0;
-    androidEdgeStartX = androidEdgeStartY = 0.0f;
+void Game::toggleCameraViewF2() {
+    if (camera->getMode() == 0) {
+        camera->setMode(1);
+    } else {
+        camera->setMode(0);
+    }
 }
 
-// Optional touch equivalent of Enter: right-edge pull. Back uses the system SDLK_AC_BACK / trap hint.
-// Returns: 0 = none, 1 = Enter.
-int Game::androidFeedFingerEdgeKeyGesture(const SDL_Event& event) {
-    if (event.type != SDL_FINGERDOWN && event.type != SDL_FINGERUP) return 0;
+#if defined(__ANDROID__)
+void Game::resetAndroidTouchKeyGestures() {
+    androidLookTouchActive = false;
+    androidLookFingerId = 0;
+    androidDpadActive = false;
+    androidDpadDir = 0;
+    androidDpadFingerId = 0;
+    androidEnterTapActive = false;
+    androidEnterTapFingerId = 0;
+    androidEnterTapStartX = androidEnterTapStartY = 0.0f;
+    androidEnterTapStartTicks = 0;
+    androidPinchLastDist = 0.0f;
+    androidMenuEnterTapActive = false;
+    androidMenuEnterTapFingerId = 0;
+    androidMenuEnterTapX = androidMenuEnterTapY = 0.0f;
+    androidMenuEnterTapStartTicks = 0;
+}
+
+void Game::androidOnTwoFingerStateForMap(SDL_TouchID touchIdFromEvent) {
+    if (map->isGameOver()) return;
+    const SDL_TouchID dev = androidResolveMapTouchId(touchIdFromEvent);
+    if (dev == 0) return;
+    if (SDL_GetNumTouchFingers(dev) < 2) {
+        return;
+    }
+    const SDL_Finger* f0 = SDL_GetTouchFinger(dev, 0);
+    const SDL_Finger* f1 = SDL_GetTouchFinger(dev, 1);
+    if (!f0 || !f1) {
+        return;
+    }
     const float w = (float)window->getWidth();
     const float h = (float)window->getHeight();
-    if (w < 1.0f || h < 1.0f) return 0;
-    const float px = event.tfinger.x * w;
-    const float py = event.tfinger.y * h;
-    if (event.type == SDL_FINGERDOWN) {
-        if (androidEdgeActive) return 0;
-        if (px > w * 0.88f) {
-            androidEdgeActive = true;
-            androidEdgeFingerId = event.tfinger.fingerId;
-            androidEdgeStartX = px;
-            androidEdgeStartY = py;
+    const float x0 = f0->x * w, y0 = f0->y * h, x1 = f1->x * w, y1 = f1->y * h;
+    if (androidDpadBoxContainsPoint(x0, y0) || androidDpadBoxContainsPoint(x1, y1)
+        || androidViewToggleContainsPoint(x0, y0) || androidViewToggleContainsPoint(x1, y1)
+        || androidChatButtonContainsPoint(x0, y0) || androidChatButtonContainsPoint(x1, y1)) {
+        // D-pad, View, or Chat: pinch is not this gesture.
+        return;
+    }
+    // Two-finger interaction in the main play area: cancel look/enter and start pinch baseline in TPS.
+    androidLookTouchActive = false;
+    androidEnterTapActive = false;
+    if (camera->getMode() == 1) {
+        androidPinchLastDist = 0.0f;
+    }
+}
+
+bool Game::androidUpdatePinchZoom(SDL_TouchID touchIdFromEvent) {
+    if (map->isGameOver() || camera->getMode() != 1) {
+        androidPinchLastDist = 0.0f;
+        return false;
+    }
+    const SDL_TouchID dev = androidResolveMapTouchId(touchIdFromEvent);
+    if (dev == 0) {
+        androidPinchLastDist = 0.0f;
+        return false;
+    }
+    const int nf = (int)SDL_GetNumTouchFingers(dev);
+    if (nf < 2) {
+        androidPinchLastDist = 0.0f;
+        return false;
+    }
+    const SDL_Finger* f0 = SDL_GetTouchFinger(dev, 0);
+    const SDL_Finger* f1 = SDL_GetTouchFinger(dev, 1);
+    if (!f0 || !f1) {
+        androidPinchLastDist = 0.0f;
+        return false;
+    }
+    const float w = (float)window->getWidth();
+    const float h = (float)window->getHeight();
+    const float x0 = f0->x * w, y0 = f0->y * h, x1 = f1->x * w, y1 = f1->y * h;
+    if (androidDpadBoxContainsPoint(x0, y0) || androidDpadBoxContainsPoint(x1, y1)
+        || androidViewToggleContainsPoint(x0, y0) || androidViewToggleContainsPoint(x1, y1)
+        || androidChatButtonContainsPoint(x0, y0) || androidChatButtonContainsPoint(x1, y1)) {
+        androidPinchLastDist = 0.0f;
+        // Do not claim this motion: d-pad + look can run in parallel; no pinch in HUD mix.
+        return false;
+    }
+    const float dist = std::hypot(x1 - x0, y1 - y0);
+    if (androidPinchLastDist > 0.0f) {
+        const float dd = dist - androidPinchLastDist;
+        // Pinch-to-zoom scale (higher = more sensitive; clamped in Camera::addZoomPinch).
+        camera->addZoomPinch(-0.055f * dd);
+    }
+    androidPinchLastDist = dist;
+    return true;
+}
+
+void Game::androidGetViewToggleButtonLayout(float& outX, float& outY, float& outS) const {
+    const float w = (float)window->getWidth();
+    const float h = (float)window->getHeight();
+    const float m = 16.0f;
+    float s = w < h ? w : h;
+    s *= 0.12f;
+    if (s < 56.0f) s = 56.0f;
+    if (s > 96.0f) s = 96.0f;
+    // Bottom-right; look works on the full screen (except chat/d-pad/View on down), so the button is flush to the margin.
+    outS = s;
+    outX = w - m - s;
+    if (outX < m) {
+        outX = m;
+    }
+    outY = h - m - s;
+}
+
+bool Game::androidViewToggleContainsPoint(float px, float py) const {
+    float x, y, s;
+    androidGetViewToggleButtonLayout(x, y, s);
+    return px >= x && py >= y && px <= x + s && py <= y + s;
+}
+
+void Game::drawAndroidViewToggleButton() {
+    float x, y, s;
+    androidGetViewToggleButtonLayout(x, y, s);
+    const SDL_Color plate = { 40, 40, 52 };
+    const SDL_Color inner = { 60, 60, 78 };
+    drawUtils->drawRectangle(plate, x - 2.0f, y - 2.0f, s + 4.0f, s + 4.0f);
+    drawUtils->drawRectangle(inner, x, y, s, s);
+    std::unique_ptr<Texture> t(renderText("View", fonts.data()));
+    float scale = fminf(1.85f, fmaxf(1.15f, s * 0.09f)) * kInGameTextScale;
+    {
+        const float pad = 4.0f;
+        const float maxSc = fminf((s - pad) / fmaxf(1.0f, (float)t->getWidth()), (s - pad) / fmaxf(1.0f, (float)t->getHeight()));
+        if (scale > maxSc) {
+            scale = maxSc;
         }
+    }
+    const float tw = t->getWidth() * scale;
+    const float th = t->getHeight() * scale;
+    drawUtils->drawTexture2D(t.get(), x + (s - tw) * 0.5f, y + (s - th) * 0.5f, scale);
+}
+
+void Game::androidToggleViewFromPointer() {
+    // A single touch typically generates both SDL_FINGER* and a synthetic mouse event; each would
+    // call toggle and cancel out. Coalesce to one flip per user tap.
+    static Uint32 s_lastMs = 0;
+    const Uint32 t = SDL_GetTicks();
+    if (t - s_lastMs < 180) return;
+    s_lastMs = t;
+    toggleCameraViewF2();
+}
+
+void Game::androidGetChatButtonLayout(float& outX, float& outY, float& outS) const {
+    if (gameMode != GameMode::MULTIPLAYER) {
+        outX = outY = outS = 0.0f;
+        return;
+    }
+    float vx, vy, s;
+    androidGetViewToggleButtonLayout(vx, vy, s);
+    const float gap = 8.0f;
+    outS = s;
+    outX = vx - gap - s;
+    const float m = 16.0f;
+    if (outX < m) {
+        outX = m;
+    }
+    outY = vy;
+}
+
+bool Game::androidChatButtonContainsPoint(float px, float py) const {
+    if (gameMode != GameMode::MULTIPLAYER) {
+        return false;
+    }
+    float x, y, s;
+    androidGetChatButtonLayout(x, y, s);
+    if (s <= 0.0f) {
+        return false;
+    }
+    return px >= x && py >= y && px <= x + s && py <= y + s;
+}
+
+void Game::drawAndroidChatButton() {
+    if (gameMode != GameMode::MULTIPLAYER) {
+        return;
+    }
+    float x, y, s;
+    androidGetChatButtonLayout(x, y, s);
+    const SDL_Color plate = { 40, 40, 52 };
+    const SDL_Color inner = { 60, 60, 78 };
+    drawUtils->drawRectangle(plate, x - 2.0f, y - 2.0f, s + 4.0f, s + 4.0f);
+    drawUtils->drawRectangle(inner, x, y, s, s);
+    std::unique_ptr<Texture> t(renderText("Chat", fonts.data()));
+    float scale = fminf(1.85f, fmaxf(1.15f, s * 0.09f)) * kInGameTextScale;
+    {
+        const float pad = 4.0f;
+        const float maxSc = fminf((s - pad) / fmaxf(1.0f, (float)t->getWidth()), (s - pad) / fmaxf(1.0f, (float)t->getHeight()));
+        if (scale > maxSc) {
+            scale = maxSc;
+        }
+    }
+    const float tw = t->getWidth() * scale;
+    const float th = t->getHeight() * scale;
+    drawUtils->drawTexture2D(t.get(), x + (s - tw) * 0.5f, y + (s - th) * 0.5f, scale);
+}
+
+void Game::androidOpenChatFromPointer() {
+    if (map->isGameOver() || gameMode != GameMode::MULTIPLAYER) {
+        return;
+    }
+    static Uint32 s_lastMs = 0;
+    const Uint32 t = SDL_GetTicks();
+    if (t - s_lastMs < 180) {
+        return;
+    }
+    s_lastMs = t;
+    if (!chatMode) {
+        chatMode = true;
+        inputText = "";
+        SDL_PumpEvents();
+        SDL_FlushEvent(SDL_TEXTINPUT);
+    }
+    androidRequestScreenKeyboardOnTap();
+}
+
+void Game::androidDpadGetLayout(float& outX, float& outY, float& outSize, float& outCell) const {
+    const float w = (float)window->getWidth();
+    const float h = (float)window->getHeight();
+    const float m = 16.0f;
+    float s = w < h ? w : h;
+    s *= 0.35f;
+    if (s < 140.0f) s = 140.0f;
+    if (s > 300.0f) s = 300.0f;
+    outX = m;
+    outY = h - m - s;
+    outSize = s;
+    outCell = s / 3.0f;
+}
+
+bool Game::androidDpadBoxContainsPoint(float px, float py) const {
+    float x0, y0, s, cell;
+    androidDpadGetLayout(x0, y0, s, cell);
+    (void)cell;
+    return px >= x0 && py >= y0 && px <= x0 + s && py <= y0 + s;
+}
+
+// 3x3 grid: four arms (U/D/L/R), center and corners inert = no movement
+int Game::androidDpadDirectionAtPoint(float px, float py, bool allowSlop) const {
+    float x0, y0, s, cell;
+    androidDpadGetLayout(x0, y0, s, cell);
+    if (px < x0 || px > x0 + s) {
         return 0;
     }
-    if (event.type == SDL_FINGERUP) {
-        if (!androidEdgeActive || event.tfinger.fingerId != androidEdgeFingerId) return 0;
-        androidEdgeActive = false;
-        const float dx = px - androidEdgeStartX;
-        const float dy = py - androidEdgeStartY;
-        const float minPull = std::fmax(40.0f, 0.06f * w);
-        if (-dx > minPull && std::fabs(dy) < 0.2f * h) return 1;
+    float pyy = py;
+    if (pyy < y0) {
+        return 0;
     }
+    if (pyy > y0 + s) {
+        if (!allowSlop || pyy > y0 + s + 56.0f) {
+            return 0;
+        }
+        pyy = y0 + s;
+    }
+    int col = (int)((px - x0) / cell);
+    if (col > 2) col = 2;
+    int row = (int)((pyy - y0) / cell);
+    if (row > 2) row = 2;
+    if (row == 0 && col == 1) return (int)Direction::FORWARD;
+    if (row == 2 && col == 1) return (int)Direction::BACKWARD;
+    if (row == 1 && col == 0) return (int)Direction::LEFT;
+    if (row == 1 && col == 2) return (int)Direction::RIGHT;
     return 0;
 }
+
+void Game::drawAndroidDpadOverlays() {
+    if (map->isGameOver()) return;
+    float x0, y0, s, cell;
+    androidDpadGetLayout(x0, y0, s, cell);
+    const float oCol[3] = {0.0f, cell, 2.0f * cell};
+    const float wCol[3] = {cell, cell, cell};
+    const float oRow[3] = {0.0f, cell, 2.0f * cell};
+    const float hRow[3] = {cell, cell, cell};
+    const SDL_Color plate = { 40, 40, 52 };
+    const SDL_Color cellIdle = { 70, 70, 90 };
+    const SDL_Color cellHi = { 120, 130, 180 };
+    drawUtils->drawRectangle(plate, x0 - 4.0f, y0 - 4.0f, s + 8.0f, s + 8.0f);
+    for (int row = 0; row < 3; ++row) {
+        for (int col = 0; col < 3; ++col) {
+            int d = 0;
+            if (row == 0 && col == 1) d = (int)Direction::FORWARD;
+            else if (row == 2 && col == 1) d = (int)Direction::BACKWARD;
+            else if (row == 1 && col == 0) d = (int)Direction::LEFT;
+            else if (row == 1 && col == 2) d = (int)Direction::RIGHT;
+            const bool on = (androidDpadDir == d);
+            const SDL_Color& c = (d != 0 && on) ? cellHi : (d != 0 ? cellIdle : plate);
+            const float gap = 2.0f;
+            const float cx = x0 + oCol[col] + gap;
+            const float cy = y0 + oRow[row] + gap;
+            drawUtils->drawRectangle(c, cx, cy, wCol[col] - 2.0f * gap, hRow[row] - 2.0f * gap);
+        }
+    }
+    // Direction glyphs from specials.png: 6=right >, 7=left <, 8=up ^, 9=down (chevron; use renderSpecialsGlyph(9), not letter "v")
+    std::unique_ptr<Texture> tR(renderSpecialsGlyph(6, fonts.data()));
+    std::unique_ptr<Texture> tL(renderSpecialsGlyph(7, fonts.data()));
+    std::unique_ptr<Texture> tU(renderSpecialsGlyph(8, fonts.data()));
+    std::unique_ptr<Texture> tD(renderSpecialsGlyph(9, fonts.data()));
+    const float tGlyph = fmaxf(1.0f, fmaxf(
+        fmaxf(fmaxf((float)tR->getWidth(), (float)tR->getHeight()), fmaxf((float)tD->getWidth(), (float)tD->getHeight())),
+        fmaxf(fmaxf((float)tL->getWidth(), (float)tL->getHeight()), fmaxf((float)tU->getWidth(), (float)tU->getHeight()))));
+    const float ts = chevronTextureScaleForCellSide(cell, tGlyph);
+    auto drawArrow = [&](Texture* t, int row, int col) {
+        const float aw = t->getWidth() * ts;
+        const float ah = t->getHeight() * ts;
+        const float ccx = x0 + oCol[col] + 0.5f * wCol[col];
+        const float ccy = y0 + oRow[row] + 0.5f * hRow[row];
+        drawUtils->drawTexture2D(t, ccx - 0.5f * aw, ccy - 0.5f * ah, ts, 0, 0, 0.0f);
+    };
+    drawArrow(tU.get(), 0, 1);
+    drawArrow(tD.get(), 2, 1);
+    drawArrow(tL.get(), 1, 0);
+    drawArrow(tR.get(), 1, 2);
+}
+
 #endif
 
 int Game::getHighScore() const {
