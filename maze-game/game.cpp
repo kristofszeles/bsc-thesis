@@ -908,7 +908,21 @@ Game::MapEvent Game::handleMapEvents() {
 
 void Game::handleMapKeyState() {
     if (!map->getPlayer()) return;
-    if (!map->isGameOver() && !chatMode) {
+    if (!map->isGameOver()) {
+#if defined(__ANDROID__)
+        if (androidDpadActive) {
+            if (androidDpadDir != 0) {
+                map->getPlayer()->setAcceleration(1);
+                map->getPlayer()->setDirection(androidDpadDir);
+            } else
+                map->getPlayer()->setAcceleration(0);
+            return;
+        }
+#endif
+        if (chatMode) {
+            map->getPlayer()->setAcceleration(0);
+            return;
+        }
         const Uint8* keyState = SDL_GetKeyboardState(nullptr);
         if (keyState[SDL_SCANCODE_UP] || keyState[SDL_SCANCODE_W]) {
             map->getPlayer()->setAcceleration(1);
@@ -942,31 +956,91 @@ void Game::handleMapKeyState() {
     }
 }
 
+void Game::changeChooseVehicleBy(int delta) {
+    if (subMenu != SubMenu::CHOOSE_VEHICLE || vehicles.empty()) return;
+    int idx = (int)config->getData()["game"]["vehicle"];
+    idx += delta;
+    if (idx < 0) idx = 0;
+    const int n = (int)vehicles.size();
+    if (idx >= n) idx = n - 1;
+    config->getData()["game"]["vehicle"] = idx;
+}
+
+void Game::menuChooseVehicleGetArrowButtonLayout(bool left, float& outX, float& outY, float& outS) const {
+    const float w = (float)window->getWidth();
+    const float h = (float)window->getHeight();
+    const float m = 24.0f;
+    float s = w < h ? w : h;
+    s *= 0.14f;
+    if (s < 56.0f) s = 56.0f;
+    if (s > 100.0f) s = 100.0f;
+    outS = s;
+    outY = h * 0.5f - s * 0.5f;
+    if (left) {
+        outX = m;
+    } else {
+        outX = w - m - s;
+    }
+}
+
+int Game::menuPointHitsChooseVehicleArrow(float px, float py) const {
+    if (subMenu != SubMenu::CHOOSE_VEHICLE) return -1;
+    float lx, ly, ls, rx, ry, rs;
+    menuChooseVehicleGetArrowButtonLayout(true, lx, ly, ls);
+    menuChooseVehicleGetArrowButtonLayout(false, rx, ry, rs);
+    if (px >= lx && py >= ly && px <= lx + ls && py <= ly + ls) return 0;
+    if (px >= rx && py >= ry && px <= rx + rs && py <= ry + rs) return 1;
+    return -1;
+}
+
+void Game::drawMenuChooseVehicleArrows() {
+    if (subMenu != SubMenu::CHOOSE_VEHICLE) return;
+    const SDL_Color plate = { 40, 40, 52 };
+    const SDL_Color inner = { 60, 60, 78 };
+    for (int i = 0; i < 2; ++i) {
+        const bool isLeft = (i == 0);
+        float x, y, s;
+        menuChooseVehicleGetArrowButtonLayout(isLeft, x, y, s);
+        drawUtils->drawRectangle(plate, x - 2.0f, y - 2.0f, s + 4.0f, s + 4.0f);
+        drawUtils->drawRectangle(inner, x, y, s, s);
+        std::unique_ptr<Texture> tArr(renderSpecialsGlyph(isLeft ? 7 : 6, fonts.data()));
+        const float tGlyph = fmaxf(1.0f, fmaxf((float)tArr->getWidth(), (float)tArr->getHeight()));
+        const float scale = chevronTextureScaleForCellSide(s, tGlyph);
+        const float tw = tArr->getWidth() * scale;
+        const float th = tArr->getHeight() * scale;
+        drawUtils->drawTexture2D(tArr.get(), x + (s - tw) * 0.5f, y + (s - th) * 0.5f, scale, 0, 0, 0.0f);
+    }
+}
+
 int Game::handleMenuEvents() {
     int clickedButtonIndex = 0;
+#if defined(__ANDROID__)
+    bool menuBlankTapEnter = false;
+#endif
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
         case SDL_QUIT:
             exitGame();
             break;
+#if defined(__ANDROID__)
+        case SDL_MOUSEBUTTONDOWN:
+            if (event.button.button == SDL_BUTTON_LEFT
+                && (subMenu == SubMenu::ENTER_PLAYER_NAME || subMenu == SubMenu::ENTER_SERVER_ADDRESS)) {
+                androidRequestScreenKeyboardOnTap();
+            }
+            break;
+#endif
         case SDL_MOUSEBUTTONUP:
             if (event.button.button == SDL_BUTTON_LEFT) {
-                int buttonIndex = 1;
-                std::list<Button*> buttons;
-                if (subMenu == SubMenu::MAIN) buttons = menu->getButtonGroup1();
-                else if (subMenu == SubMenu::CHOOSE_DIFFICULTY) buttons = menu->getButtonGroup2();
-                for (auto& button : buttons) {
-                    float scale = button->getScale();
-                    float x = window->getWidth() / 2 - button->getWidth() * button->getScale() / 2;
-                    float y = button->getY() + window->getHeight() / 2 - button->getHeight() * scale;
-                    float w = button->getWidth() * scale * window->getViewportScaleX();
-                    float h = button->getHeight() * scale * window->getViewportScaleY();
-                    if (event.button.x >= x && event.button.x < x + w && event.button.y >= y && event.button.y < y + h) {
-                        clickedButtonIndex = buttonIndex;
-                        break;
-                    }
-                    ++buttonIndex;
+#if defined(__ANDROID__)
+                if (event.button.which == SDL_TOUCH_MOUSEID) {
+                    break;
+                }
+#endif
+                const int hit = menuApplyPointerUpAt((float)event.button.x, (float)event.button.y);
+                if (hit > 0) {
+                    clickedButtonIndex = hit;
                 }
             }
             break;
@@ -975,10 +1049,9 @@ int Game::handleMenuEvents() {
             else if (event.key.keysym.sym == SDLK_RETURN || event.key.keysym.sym == SDLK_KP_ENTER) return MenuEvent::MENU_PRESS_ENTER;
             else if (event.key.keysym.sym == SDLK_F11) window->toggleMaximized();
             else if (event.key.keysym.sym == SDLK_LEFT) {
-                if (subMenu == SubMenu::CHOOSE_VEHICLE && config->getData()["game"]["vehicle"] > 0) config->getData()["game"]["vehicle"] = (int)config->getData()["game"]["vehicle"] - 1;
-            }
-            else if (event.key.keysym.sym == SDLK_RIGHT) {
-                if (subMenu == SubMenu::CHOOSE_VEHICLE && config->getData()["game"]["vehicle"] < (int)vehicles.size() - 1) config->getData()["game"]["vehicle"] = (int)config->getData()["game"]["vehicle"] + 1;
+                if (subMenu == SubMenu::CHOOSE_VEHICLE) changeChooseVehicleBy(-1);
+            } else if (event.key.keysym.sym == SDLK_RIGHT) {
+                if (subMenu == SubMenu::CHOOSE_VEHICLE) changeChooseVehicleBy(1);
             }
             else if (event.key.keysym.sym == SDLK_BACKSPACE) {
                 if (inputText.size() > 0) inputText.pop_back();
@@ -1010,19 +1083,61 @@ int Game::handleMenuEvents() {
         }
 #if defined(__ANDROID__)
         case SDL_FINGERDOWN:
-            androidFeedFingerEdgeKeyGesture(event);
+            androidRequestScreenKeyboardOnTap();
+            {
+                const float w = (float)window->getWidth();
+                const float h = (float)window->getHeight();
+                androidMenuEnterTapActive = true;
+                androidMenuEnterTapFingerId = event.tfinger.fingerId;
+                androidMenuEnterTapX = event.tfinger.x * w;
+                androidMenuEnterTapY = event.tfinger.y * h;
+                androidMenuEnterTapStartTicks = SDL_GetTicks();
+            }
             break;
         case SDL_FINGERUP: {
-            const int k = androidFeedFingerEdgeKeyGesture(event);
-            if (k == 1) return MenuEvent::MENU_PRESS_ENTER;
+            if (event.tfinger.fingerId == androidMenuEnterTapFingerId) {
+                const float w = (float)window->getWidth();
+                const float h = (float)window->getHeight();
+                const float uxp = event.tfinger.x * w;
+                const float uyp = event.tfinger.y * h;
+                if (androidMenuEnterTapActive) {
+                    const float d = std::hypot(uxp - androidMenuEnterTapX, uyp - androidMenuEnterTapY);
+                    if (d <= 32.0f && (float)(SDL_GetTicks() - androidMenuEnterTapStartTicks) <= 450.0f) {
+                        const int hit = menuApplyPointerUpAt(uxp, uyp);
+                        if (hit > 0) {
+                            clickedButtonIndex = hit;
+                        } else if (hit == 0) {
+                            menuBlankTapEnter = true;
+                        }
+                    }
+                }
+                androidMenuEnterTapActive = false;
+            }
             break;
         }
         case SDL_FINGERMOTION:
+            if (androidMenuEnterTapActive && event.tfinger.fingerId == androidMenuEnterTapFingerId) {
+                const float w = (float)window->getWidth();
+                const float h = (float)window->getHeight();
+                const float mpx = event.tfinger.x * w;
+                const float mpy = event.tfinger.y * h;
+                if (std::hypot(mpx - androidMenuEnterTapX, mpy - androidMenuEnterTapY) > 32.0f) {
+                    androidMenuEnterTapActive = false;
+                }
+            }
             break;
 #endif
         }
     }
-    return clickedButtonIndex;
+    if (clickedButtonIndex > 0) {
+        return clickedButtonIndex;
+    }
+#if defined(__ANDROID__)
+    if (menuBlankTapEnter) {
+        return MenuEvent::MENU_PRESS_ENTER;
+    }
+#endif
+    return 0;
 }
 
 void Game::runAutoPlay() {
@@ -1181,6 +1296,56 @@ void Game::deleteMap() {
 void Game::initMenu() {
     menu = new Menu(fonts.data());
     generateMap(mazeWidth, mazeHeight);
+#if defined(__ANDROID__)
+    androidMenuEnterTapActive = false;
+    androidMenuEnterTapFingerId = 0;
+    androidMenuEnterTapX = androidMenuEnterTapY = 0.0f;
+    androidMenuEnterTapStartTicks = 0;
+#endif
+}
+
+void Game::gameMapApplyEnterAction() {
+    if (chatMode && !inputText.empty()) {
+        client->sendChatMessage(inputText);
+        chatMode = false;
+#if defined(__ANDROID__)
+        syncAndroidTextInputState();
+#endif
+    }
+}
+
+// Returns: -1 if a choose-vehicle arrow was handled, 0 if no button, 1+ = main/difficulty button index
+int Game::menuApplyPointerUpAt(float px, float py) {
+    if (subMenu == SubMenu::CHOOSE_VEHICLE) {
+        const int hit = menuPointHitsChooseVehicleArrow(px, py);
+        if (hit == 0) {
+            changeChooseVehicleBy(-1);
+            return -1;
+        }
+        if (hit == 1) {
+            changeChooseVehicleBy(1);
+            return -1;
+        }
+    }
+    int buttonIndex = 1;
+    std::list<Button*> buttons;
+    if (subMenu == SubMenu::MAIN) {
+        buttons = menu->getButtonGroup1();
+    } else if (subMenu == SubMenu::CHOOSE_DIFFICULTY) {
+        buttons = menu->getButtonGroup2();
+    }
+    for (auto& button : buttons) {
+        const float scale = button->getScale();
+        const float x = window->getWidth() / 2 - button->getWidth() * button->getScale() / 2;
+        const float y = button->getY() + window->getHeight() / 2 - button->getHeight() * scale;
+        const float w = button->getWidth() * scale * window->getViewportScaleX();
+        const float h = button->getHeight() * scale * window->getViewportScaleY();
+        if (px >= x && px < x + w && py >= y && py < y + h) {
+            return buttonIndex;
+        }
+        ++buttonIndex;
+    }
+    return 0;
 }
 
 void Game::deleteMenu() {
