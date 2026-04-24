@@ -683,9 +683,12 @@ Game::MapEvent Game::handleMapEvents() {
             if (relativeMouseMode) {
                 float mouseSensitivity = config->getData()["game"]["mouseSensitivity"];
                 if (mouseSensitivity < 0.1f) mouseSensitivity = 0.1f;
-                else if (mouseSensitivity > 1.0f) mouseSensitivity = 1.0f;
-                camera->adjustYaw(-(event.motion.xrel * mouseSensitivity));
-                camera->adjustPitch(event.motion.yrel * mouseSensitivity);
+                else if (mouseSensitivity > 2.0f) mouseSensitivity = 2.0f;
+                // Config scale; touch look uses a separate path (see SDL_FINGERMOTION).
+                constexpr float kMouseLookGain = 1.75f;
+                const float s = mouseSensitivity * kMouseLookGain;
+                camera->adjustYaw(-(event.motion.xrel * s));
+                camera->adjustPitch(event.motion.yrel * s);
             }
             break;
         }
@@ -696,6 +699,28 @@ Game::MapEvent Game::handleMapEvents() {
             }
             break;
         case SDL_MOUSEBUTTONDOWN:
+#if defined(__ANDROID__)
+            // A single touch also emits a synthetic left click. Do not use it to dismiss: either
+            // FINGER will dismiss, or it would fire after FINGER opened chat and kill chat immediately.
+            // (Same idea as menu ignoring SDL_TOUCH_MOUSEID on MOUSEBUTTONUP for hit testing.)
+            if (event.button.button == SDL_BUTTON_LEFT && chatMode) {
+                if (event.button.which == SDL_TOUCH_MOUSEID) {
+                    break;
+                }
+                androidDismissChatAndKeyboard();
+                break;
+            }
+            if (event.button.button == SDL_BUTTON_LEFT && !map->isGameOver()
+                && androidViewToggleContainsPoint((float)event.button.x, (float)event.button.y)) {
+                androidToggleViewFromPointer();
+                break;
+            }
+            if (event.button.button == SDL_BUTTON_LEFT && !map->isGameOver() && gameMode == GameMode::MULTIPLAYER
+                && androidChatButtonContainsPoint((float)event.button.x, (float)event.button.y)) {
+                androidOpenChatFromPointer();
+                break;
+            }
+#endif
 #if !defined(__ANDROID__)
             if (event.button.button == SDL_BUTTON_RIGHT) {
                 relativeMouseMode = 1 - relativeMouseMode;
@@ -712,19 +737,22 @@ Game::MapEvent Game::handleMapEvents() {
                     generateMap(mazeWidth, mazeHeight);
                 }
             } else if (event.key.keysym.sym == SDLK_F2) {
-                if (camera->getMode() == 0) camera->setMode(1);
-                else camera->setMode(0);
+                toggleCameraViewF2();
             }
             else if (event.key.keysym.sym == SDLK_F11) window->toggleMaximized();
             else if (keyIsBackOrEscape(event.key.keysym)) {
-                if (chatMode) chatMode = false;
-                else return MapEvent::MAP_PRESS_ESCAPE;
+                if (chatMode) {
+#if defined(__ANDROID__)
+                    androidDismissChatAndKeyboard();
+#else
+                    chatMode = false;
+#endif
+                } else {
+                    return MapEvent::MAP_PRESS_ESCAPE;
+                }
             }
             else if (event.key.keysym.sym == SDLK_RETURN || event.key.keysym.sym == SDLK_KP_ENTER) {
-                if (chatMode && !inputText.empty()) {
-                    client->sendChatMessage(inputText);
-                    chatMode = false;
-                }
+                gameMapApplyEnterAction();
             } else if (event.key.keysym.sym == SDLK_t) {
                 if (!chatMode && gameMode == GameMode::MULTIPLAYER) {
                     chatMode = true;
@@ -762,12 +790,20 @@ Game::MapEvent Game::handleMapEvents() {
             break;
         }
 #if defined(__ANDROID__)
-        case SDL_FINGERDOWN:
+        case SDL_FINGERDOWN: {
+            const float w = (float)window->getWidth();
+            const float h = (float)window->getHeight();
+            const float px = event.tfinger.x * w;
+            const float py = event.tfinger.y * h;
+            if (chatMode) {
+                if (gameMode == GameMode::MULTIPLAYER && androidChatButtonContainsPoint(px, py)) {
+                    androidOpenChatFromPointer();
+                } else {
+                    androidDismissChatAndKeyboard();
+                }
+                break;
+            }
             if (map->isGameOver()) {
-                const float w = (float)window->getWidth();
-                const float h = (float)window->getHeight();
-                const float px = event.tfinger.x * w;
-                const float py = event.tfinger.y * h;
                 if (px > w * 0.2f && px < w * 0.8f && py > h * 0.2f && py < h * 0.8f) {
                     config->getData()["game"]["singlePlayer"]["highScore"] = getHighScore();
                     setPlayerScore(0);
@@ -777,21 +813,92 @@ Game::MapEvent Game::handleMapEvents() {
                 }
                 break;
             }
-            androidFeedFingerEdgeKeyGesture(event);
-            break;
-        case SDL_FINGERUP:
-            if (map->isGameOver()) break;
-            {
-                const int k = androidFeedFingerEdgeKeyGesture(event);
-                if (k == 1) {
-                    if (chatMode && !inputText.empty()) {
-                        client->sendChatMessage(inputText);
-                        chatMode = false;
-                    }
+            if (androidViewToggleContainsPoint(px, py)) {
+                androidToggleViewFromPointer();
+                break;
+            }
+            if (gameMode == GameMode::MULTIPLAYER && androidChatButtonContainsPoint(px, py)) {
+                androidOpenChatFromPointer();
+                break;
+            }
+            if (!map->isGameOver() && androidDpadBoxContainsPoint(px, py)) {
+                androidDpadActive = true;
+                androidDpadFingerId = event.tfinger.fingerId;
+                androidDpadDir = androidDpadDirectionAtPoint(px, py);
+            } else if (!map->isGameOver()) {
+                if (!androidLookTouchActive) {
+                    androidLookTouchActive = true;
+                    androidLookFingerId = event.tfinger.fingerId;
                 }
+            }
+            if (!map->isGameOver() && !androidViewToggleContainsPoint(px, py) && !androidChatButtonContainsPoint(px, py)
+                && !androidDpadBoxContainsPoint(px, py)) {
+                androidEnterTapActive = true;
+                androidEnterTapFingerId = event.tfinger.fingerId;
+                androidEnterTapStartX = px;
+                androidEnterTapStartY = py;
+                androidEnterTapStartTicks = SDL_GetTicks();
+            } else {
+                androidEnterTapActive = false;
+            }
+            androidOnTwoFingerStateForMap(event.tfinger.touchId);
+            break;
+        }
+        case SDL_FINGERUP:
+            if (event.tfinger.fingerId == androidDpadFingerId) {
+                androidDpadActive = false;
+                androidDpadDir = 0;
+            }
+            if (event.tfinger.fingerId == androidLookFingerId) {
+                androidLookTouchActive = false;
+            }
+            if (map->isGameOver()) {
+                androidEnterTapActive = false;
+                break;
+            }
+            if (androidEnterTapActive && event.tfinger.fingerId == androidEnterTapFingerId) {
+                const float w = (float)window->getWidth();
+                const float wheight = (float)window->getHeight();
+                const float uxp = event.tfinger.x * w;
+                const float uyp = event.tfinger.y * wheight;
+                const float d = std::hypot(uxp - androidEnterTapStartX, uyp - androidEnterTapStartY);
+                if (d <= 32.0f && (float)(SDL_GetTicks() - androidEnterTapStartTicks) <= 450.0f) {
+                    gameMapApplyEnterAction();
+                }
+            }
+            if (event.tfinger.fingerId == androidEnterTapFingerId) {
+                androidEnterTapActive = false;
             }
             break;
         case SDL_FINGERMOTION:
+            // TPS pinch-zoom first: it must win over one-finger yaw/pitch (uses event touch device id).
+            if (androidUpdatePinchZoom(event.tfinger.touchId)) {
+                break;
+            }
+            if (androidEnterTapActive && event.tfinger.fingerId == androidEnterTapFingerId) {
+                const float w = (float)window->getWidth();
+                const float h = (float)window->getHeight();
+                const float mpx = event.tfinger.x * w;
+                const float mpy = event.tfinger.y * h;
+                if (std::hypot(mpx - androidEnterTapStartX, mpy - androidEnterTapStartY) > 32.0f) {
+                    androidEnterTapActive = false;
+                }
+            }
+            if (event.tfinger.fingerId == androidDpadFingerId && androidDpadActive) {
+                const float w = (float)window->getWidth();
+                const float h = (float)window->getHeight();
+                const float px = event.tfinger.x * w;
+                const float py = event.tfinger.y * h;
+                androidDpadDir = androidDpadDirectionAtPoint(px, py, true);
+            } else if (androidLookTouchActive && event.tfinger.fingerId == androidLookFingerId) {
+                float sens = (float)config->getData()["game"]["mouseSensitivity"];
+                if (sens < 0.1f) sens = 0.1f;
+                else if (sens > 1.0f) sens = 1.0f;
+                const float w = (float)window->getWidth();
+                const float h = (float)window->getHeight();
+                camera->adjustYaw(-(event.tfinger.dx * w * 0.4f * sens));
+                camera->adjustPitch(event.tfinger.dy * h * 0.4f * sens);
+            }
             break;
 #endif
         }
