@@ -34,6 +34,13 @@ public:
     void adjustPitch(float value) { this->pitch += value; }
     void zoomIn() { zVel -= 0.5f; }
     void zoomOut() { zVel += 0.5f; }
+    /** TPS (mode 1): apply pinch directly to zoom (not through zVel). */
+    void addZoomPinch(float delta) {
+        if (mode != 1) return;
+        zoom += delta;
+        if (zoom < MIN_ZOOM_AMOUNT) zoom = MIN_ZOOM_AMOUNT;
+        if (zoom > MAX_ZOOM_AMOUNT) zoom = MAX_ZOOM_AMOUNT;
+    }
     void rotateTo(int value) { targetYaw = value; }
     void reset() {
         mode = 0;
