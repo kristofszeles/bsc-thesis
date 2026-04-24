@@ -12,15 +12,23 @@ private:
 public:
     Menu(SDL_Surface** fonts) {
         vehicleAngle = 0;
-        buttonGroup1.push_back(new Button("New Game", 0, 0, 4, fonts));
-        buttonGroup1.push_back(new Button("Continue Game", 0, 52, 4, fonts));
-        buttonGroup1.push_back(new Button("Multiplayer", 0, 104, 4, fonts));
-        buttonGroup1.push_back(new Button("Map Editor", 0, 156, 4, fonts));
-        buttonGroup1.push_back(new Button("Quit Game", 0, 208, 4, fonts));
-        buttonGroup2.push_back(new Button("Easy", 0, 0, 4, fonts));
-        buttonGroup2.push_back(new Button("Medium", 0, 52, 4, fonts));
-        buttonGroup2.push_back(new Button("Hard", 0, 104, 4, fonts));
-        buttonGroup2.push_back(new Button("Custom Map...", 0, 156, 4, fonts));
+#if defined(__ANDROID__)
+        // Larger touch targets: 2x scale vs desktop; y step 90 for 720p (vs 52 / scale 4 on PC).
+        const float bs = 8.0f;
+        const float y1 = 90.0f, y2 = 180.0f, y3 = 270.0f, y4 = 360.0f;
+#else
+        const float bs = 4.0f;
+        const float y1 = 52.0f, y2 = 104.0f, y3 = 156.0f, y4 = 208.0f;
+#endif
+        buttonGroup1.push_back(new Button("New Game", 0, 0, bs, fonts));
+        buttonGroup1.push_back(new Button("Continue Game", 0, y1, bs, fonts));
+        buttonGroup1.push_back(new Button("Multiplayer", 0, y2, bs, fonts));
+        buttonGroup1.push_back(new Button("Map Editor", 0, y3, bs, fonts));
+        buttonGroup1.push_back(new Button("Quit Game", 0, y4, bs, fonts));
+        buttonGroup2.push_back(new Button("Easy", 0, 0, bs, fonts));
+        buttonGroup2.push_back(new Button("Medium", 0, y1, bs, fonts));
+        buttonGroup2.push_back(new Button("Hard", 0, y2, bs, fonts));
+        buttonGroup2.push_back(new Button("Custom Map...", 0, y3, bs, fonts));
     }
     ~Menu() {
         for (auto& button : buttonGroup1) delete button;
