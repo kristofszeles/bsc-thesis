@@ -1,6 +1,7 @@
 #include <vector>
 #include <fstream>
 #include <memory>
+#include <algorithm>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -8,6 +9,35 @@
 #include "drawutils.h"
 #include "button.h"
 #include "gl_compat.h"
+
+namespace {
+// specials.png: L/R use 6×7, U/D use 7×6 in each 9px column (treated as offset (1,1) in the cell).
+void specialsTextureRectForId(int id, int& outW, int& outH, int& outSrcX, int& outSrcY) {
+    if (id == 6 || id == 7) {
+        outW = 6;
+        outH = 8;
+        outSrcX = id * 9;
+        outSrcY = 0;
+    } else if (id == 8 || id == 9) {
+        outW = 7;
+        outH = 7;
+        outSrcX = id * 9;
+        outSrcY = 0;
+    } else {
+        outW = 9;
+        outH = 9;
+        outSrcX = id * 9;
+        outSrcY = 0;
+    }
+}
+}  // namespace
+
+// Menu chrome (main menu, text fields, option titles): 2x on Android only; desktop uses legacy sizes.
+#if defined(__ANDROID__)
+static constexpr float kMazeMenuUiFontScale = 2.0f;
+#else
+static constexpr float kMazeMenuUiFontScale = 1.0f;
+#endif
 
 #if defined(__ANDROID__)
 #  include <SDL_log.h>
@@ -124,14 +154,24 @@ void main() {
     glBindVertexArray(0);
 }
 
-void drawTexturedQuad(GLuint tex, float x, float y, float w, float h, float u0, float v0, float u1, float v1) {
+void drawTexturedQuad(GLuint tex, float x, float y, float w, float h, float u0, float v0, float u1, float v1, float rotRad) {
     ensureGles2D();
-    GLfloat data[16] = {
-        x,     y,     u0, v0,
-        x + w, y,     u1, v0,
-        x,     y + h, u0, v1,
-        x + w, y + h, u1, v1,
-    };
+    const float cx = x + 0.5f * w;
+    const float cy = y + 0.5f * h;
+    const float hx = 0.5f * w;
+    const float hy = 0.5f * h;
+    // Triangle strip: TL, TR, BL, BR
+    const glm::vec2 loc[4] = { {-hx, -hy}, {hx, -hy}, {-hx, hy}, {hx, hy} };
+    const glm::vec2 uv[4] = { {u0, v0}, {u1, v0}, {u0, v1}, {u1, v1} };
+    const glm::mat4 R = glm::rotate(glm::mat4(1.0f), rotRad, glm::vec3(0.0f, 0.0f, 1.0f));
+    GLfloat data[16];
+    for (int i = 0; i < 4; i++) {
+        const glm::vec4 p = R * glm::vec4(loc[i], 0.0f, 1.0f);
+        data[i * 4 + 0] = cx + p.x;
+        data[i * 4 + 1] = cy + p.y;
+        data[i * 4 + 2] = uv[i].x;
+        data[i * 4 + 3] = uv[i].y;
+    }
     glUseProgram(g_prog_tex);
     glUniformMatrix4fv(g_loc_tex_mvp, 1, GL_FALSE, glm::value_ptr(g_ortho2d));
     glActiveTexture(GL_TEXTURE0);
@@ -182,14 +222,26 @@ void DrawUtils::setGLES2DOrtho(float width, float height) {
 #endif
 }
 
-void DrawUtils::drawTexture2D(Texture* texture, float x, float y, float scale, float width, float height) {
+void DrawUtils::drawTexture2D(Texture* texture, float x, float y, float scale, float width, float height, float rotationRadians) {
     if (!width) width = texture->getWidth() * scale;
     if (!height) height = texture->getHeight() * scale;
 #if defined(__ANDROID__)
-    drawTexturedQuad(texture->getData(), x, y, width, height, 0.0f, 0.0f, 1.0f, 1.0f);
+    drawTexturedQuad(texture->getData(), x, y, width, height, 0.0f, 0.0f, 1.0f, 1.0f, rotationRadians);
 #else
-    GLfloat vertices[4][2] = { {x, y}, {x + width, y}, {x + width, y + height}, {x, y + height} };
+    const float cx = x + 0.5f * width;
+    const float cy = y + 0.5f * height;
+    const float hx = 0.5f * width;
+    const float hy = 0.5f * height;
+    // GL_QUADS: TL, TR, BR, BL
+    const glm::vec2 loc[4] = { {-hx, -hy}, {hx, -hy}, {hx, hy}, {-hx, hy} };
+    const glm::mat4 R = glm::rotate(glm::mat4(1.0f), rotationRadians, glm::vec3(0.0f, 0.0f, 1.0f));
+    GLfloat vertices[4][2];
     GLfloat texCoords[4][2] = { {0, 0}, {1, 0}, {1, 1}, {0, 1} };
+    for (int i = 0; i < 4; i++) {
+        const glm::vec4 p = R * glm::vec4(loc[i], 0.0f, 1.0f);
+        vertices[i][0] = cx + p.x;
+        vertices[i][1] = cy + p.y;
+    }
     glBindTexture(GL_TEXTURE_2D, texture->getData());
     glEnableClientState(GL_VERTEX_ARRAY);
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
@@ -227,7 +279,7 @@ void DrawUtils::drawBackground2D(Texture* texture) {
 #if defined(__ANDROID__)
     float u1 = windowWidth / textureWidth / 4;
     float v1 = windowHeight / textureHeight / 4;
-    drawTexturedQuad(texture->getData(), 0, 0, windowWidth, windowHeight, 0, 0, u1, v1);
+    drawTexturedQuad(texture->getData(), 0, 0, windowWidth, windowHeight, 0, 0, u1, v1, 0.0f);
 #else
     GLfloat vertices[4][2] = { {0, 0}, {windowWidth, 0}, {windowWidth, windowHeight}, {0, windowHeight} };
     GLfloat texCoords[4][2] = { {0, 0}, {windowWidth / textureWidth / 4, 0}, {windowWidth / textureWidth / 4, windowHeight / textureHeight / 4}, {0, windowHeight / textureHeight / 4} };
@@ -249,25 +301,26 @@ void DrawUtils::drawText(const std::string& text, float x, float y, float scale)
 }
 
 void DrawUtils::drawTextInput(const std::string& message, const std::string& input) {
-    float scale = 4.0f;
+    const float scale = 8.0f;
+    const float off = 64.0f;
     std::unique_ptr<Texture> texture1(renderText(message, fonts));
     std::unique_ptr<Texture> texture2(renderText(input + "_", fonts));
-    drawTexture2D(texture1.get(), window->getWidth() / 2 - texture1->getWidth() * scale / 2, window->getHeight() / 2 - texture1->getHeight() * scale / 2 - 32, scale);
-    drawTexture2D(texture2.get(), window->getWidth() / 2 - texture2->getWidth() * scale / 2, window->getHeight() / 2 - texture2->getHeight() * scale / 2 + 32, scale);
+    drawTexture2D(texture1.get(), window->getWidth() / 2 - texture1->getWidth() * scale / 2, window->getHeight() / 2 - texture1->getHeight() * scale / 2 - off, scale);
+    drawTexture2D(texture2.get(), window->getWidth() / 2 - texture2->getWidth() * scale / 2, window->getHeight() / 2 - texture2->getHeight() * scale / 2 + off, scale);
 }
 
-void DrawUtils::drawLabel(Texture* texture) {
-    float scale = 6.0f;
-    drawTexture2D(texture, window->getWidth() / 2 - texture->getWidth() * scale / 2, window->getHeight() / 2 - texture->getHeight() * scale, scale);
+void DrawUtils::drawLabel(Texture* texture, float scale) {
+	drawTexture2D(texture, window->getWidth() / 2 - texture->getWidth() * scale / 2, window->getHeight() / 2 - texture->getHeight() * scale, scale);
 }
 
 void DrawUtils::drawLogo(Texture* texture) {
-    float scale = 8.0f;
-    drawTexture2D(texture, window->getWidth() / 2 - texture->getWidth() * scale / 2, window->getHeight() / 2 - texture->getHeight() * scale - 100, scale);
+    const float scale = 8.0f * kMazeMenuUiFontScale;
+    const float up = 100.0f * kMazeMenuUiFontScale;
+    drawTexture2D(texture, window->getWidth() / 2 - texture->getWidth() * scale / 2, window->getHeight() / 2 - texture->getHeight() * scale - up, scale);
 }
 
 void DrawUtils::drawAuthor(Texture* texture) {
-    float scale = 2.0f;
+    const float scale = 2.0f * kMazeMenuUiFontScale;
     drawTexture2D(texture, 0, window->getHeight() - texture->getHeight() * scale, scale);
 }
 
@@ -282,8 +335,11 @@ void DrawUtils::drawButtonGroup(const std::list<Button*>& buttons) {
         float h = button->getHeight() * scale * window->getViewportScaleY();
         drawTexture2D(button->getTexture(), x, y, button->getScale());
         if (mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + h) {
-            drawTexture2D(textures->at("select"), x - 36, y, 2);
-            drawTexture2D(textures->at("select"), x + button->getWidth() * button->getScale() + 8, y, 2);
+            const float selScale = 2.0f * kMazeMenuUiFontScale;
+            const float selPad = 36.0f * kMazeMenuUiFontScale;
+            const float selGap = 8.0f * kMazeMenuUiFontScale;
+            drawTexture2D(textures->at("select"), x - selPad, y, selScale);
+            drawTexture2D(textures->at("select"), x + button->getWidth() * button->getScale() + selGap, y, selScale);
         }
     }
 }
@@ -324,10 +380,42 @@ Texture* createTextureFromImage(const std::string& fileName) {
     return t;
 }
 
+Texture* renderSpecialsGlyph(int id, SDL_Surface** fonts) {
+    if (id < 0) {
+        id = 0;
+    }
+    if (id > 9) {
+        id = 9;
+    }
+    int w, h, sx, sy;
+    specialsTextureRectForId(id, w, h, sx, sy);
+    SDL_Surface* result = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_RGBA32);
+    SDL_Rect src = {sx, sy, w, h};
+    SDL_Rect dst = {0, 0, w, h};
+    SDL_BlitSurface(fonts[3], &src, result, &dst);
+    Texture* texture = createTextureFromSurface(result);
+#if defined(__ANDROID__)
+    // Glyphs are tiny; default surface upload uses REPEAT + mipmaps which can make edge samples wrap
+    // or over-minify, clipping the left/top texels. Chevrons need clamp + base-level nearest.
+    {
+        const GLuint tid = texture->getData();
+        glBindTexture(GL_TEXTURE_2D, tid);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+#endif
+    SDL_FreeSurface(result);
+    return texture;
+}
+
 Texture* renderText(const std::string& text, SDL_Surface** fonts) {
     SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, 854, 9, 32, SDL_PIXELFORMAT_RGBA32);
     SDL_Rect src = { 0, 0, 9, 9 };
     SDL_Rect dst = { 0, 0, 1000, 9 };
+    int lineRightMax = 0;  // for U/D 7px wide with 6px advance, extend result width
     for (unsigned int i = 0; i < text.size(); ++i) {
         if (text[i] >= '0' && text[i] <= '9') {
             int id = text[i] - '0';
@@ -364,38 +452,65 @@ Texture* renderText(const std::string& text, SDL_Surface** fonts) {
             else
                 dst.x += 7;
         } else if ((text[i] >= '!' && text[i] <= '/') || (text[i] >= ':' && text[i] <= '@') || (text[i] >= '[' && text[i] <= '`') || (text[i] >= '{' && text[i] <= '~')) {
+            // fonts[3] specials.png: ! ? . : - = > < ^ v  (ids 0..9). Down chevron is id 9 — use renderSpecialsGlyph(9). '_' uses slot 4 (hyphen art).
             int id = 0;
-            if (text[i] == '!')
+            if (text[i] == '!') {
                 id = 0;
-            else if (text[i] == '?')
+            } else if (text[i] == '?') {
                 id = 1;
-            else if (text[i] == '.')
+            } else if (text[i] == '.') {
                 id = 2;
-            else if (text[i] == ':')
+            } else if (text[i] == ':') {
                 id = 3;
-            else if (text[i] == '_')
+            } else if (text[i] == '-' || text[i] == '_') {
                 id = 4;
-            else if (text[i] == '-')
+            } else if (text[i] == '=') {
                 id = 5;
-            else if (text[i] == '>')
+            } else if (text[i] == '>') {
                 id = 6;
-            src.x = id * 9;
-            SDL_BlitSurface(fonts[3], &src, surface, &dst);
-            if (id == 1)
-                dst.x += 8;
-            else if (id == 4)
-                dst.x += 7;
-            else if (id == 5)
-                dst.x += 5;
-            else if (id == 6)
-                dst.x += 6;
-            else
-                dst.x += 4;
+            } else if (text[i] == '<') {
+                id = 7;
+            } else if (text[i] == '^') {
+                id = 8;
+            } else {
+                id = 0;
+            }
+            const int penX = dst.x;
+            if (id == 6 || id == 7) {
+                src = {id * 9 + 1, 1, 6, 7};
+                dst = {penX, 1, 6, 7};
+                SDL_BlitSurface(fonts[3], &src, surface, &dst);
+                lineRightMax = (std::max)(lineRightMax, penX + 6);
+                dst.x = penX + 6;
+            } else if (id == 8) {
+                src = {id * 9 + 1, 1, 7, 6};
+                dst = {penX, 1, 7, 6};
+                SDL_BlitSurface(fonts[3], &src, surface, &dst);
+                lineRightMax = (std::max)(lineRightMax, penX + 7);
+                dst.x = penX + 6;
+            } else {
+                src = {id * 9, 0, 9, 9};
+                dst = {penX, 0, 9, 9};
+                SDL_BlitSurface(fonts[3], &src, surface, &dst);
+                if (id == 1) {
+                    dst.x = penX + 8;
+                } else if (id == 4) {
+                    dst.x = penX + 5;
+                } else if (id == 5) {
+                    dst.x = penX + 6;
+                } else {
+                    dst.x = penX + 4;
+                }
+            }
         } else {
             dst.x += 3;
         }
     }
-    dst.w = dst.x;  // set width properly
+    if (lineRightMax > 0) {
+        dst.w = (std::max)(lineRightMax, dst.x);
+    } else {
+        dst.w = dst.x;
+    }
     SDL_Surface* result = SDL_CreateRGBSurfaceWithFormat(0, dst.w, 9, 32, SDL_PIXELFORMAT_RGBA32);
     SDL_BlitSurface(surface, nullptr, result, nullptr);
     Texture* texture = createTextureFromSurface(result);
