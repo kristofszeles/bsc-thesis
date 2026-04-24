@@ -66,6 +66,8 @@ private:
 	void initButtons();
 #if defined(__ANDROID__)
 	void syncAndroidTextInputState();
+	void androidSetTextInputRect();
+	void androidRequestScreenKeyboardOnTap();
 #endif
 public:
 	Editor(DrawUtils* drawUtils = nullptr);

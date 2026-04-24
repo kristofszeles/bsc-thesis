@@ -81,6 +81,42 @@ void Editor::run() {
 }
 
 #if defined(__ANDROID__)
+void Editor::androidSetTextInputRect() {
+	Window* win = drawUtils->getWindow();
+	if (!win) return;
+	int w = win->getWidth();
+	int h = win->getHeight();
+	if (w < 1) w = 1;
+	if (h < 1) h = 1;
+	SDL_Rect r;
+	r.x = 0;
+	r.y = (int)(h * 0.35f);
+	r.w = w;
+	r.h = (int)(h * 0.30f);
+	SDL_SetTextInputRect(&r);
+}
+
+void Editor::androidRequestScreenKeyboardOnTap() {
+	if (!showInput) return;
+	Window* win = drawUtils->getWindow();
+	if (!win || !win->getWindow()) return;
+	if (SDL_HasScreenKeyboardSupport() == SDL_TRUE) {
+		if (SDL_IsScreenKeyboardShown(win->getWindow()) == SDL_TRUE) {
+			return;
+		}
+	} else {
+		if (SDL_IsTextInputActive()) {
+			return;
+		}
+	}
+	if (SDL_IsTextInputActive()) {
+		SDL_StopTextInput();
+	}
+	SDL_StartTextInput();
+	androidSetTextInputRect();
+	SDL_RaiseWindow(win->getWindow());
+}
+
 void Editor::syncAndroidTextInputState() {
 	Window* win = drawUtils->getWindow();
 	if (!win || !win->getWindow()) return;
@@ -88,16 +124,7 @@ void Editor::syncAndroidTextInputState() {
 		if (!SDL_IsTextInputActive()) {
 			SDL_StartTextInput();
 		}
-		int w = win->getWidth();
-		int h = win->getHeight();
-		if (w < 1) w = 1;
-		if (h < 1) h = 1;
-		SDL_Rect r;
-		r.x = 0;
-		r.y = (int)(h * 0.35f);
-		r.w = w;
-		r.h = (int)(h * 0.30f);
-		SDL_SetTextInputRect(&r);
+		androidSetTextInputRect();
 	} else {
 		if (SDL_IsTextInputActive()) {
 			SDL_StopTextInput();
@@ -280,6 +307,13 @@ int Editor::handleEvents() {
 		case SDL_QUIT:
 			quit = true;
 			break;
+#if defined(__ANDROID__)
+		case SDL_FINGERDOWN:
+			if (showInput) {
+				androidRequestScreenKeyboardOnTap();
+			}
+			break;
+#endif
 		case SDL_MOUSEWHEEL:
 			if (showInput) break;
 			if (event.wheel.y > 0) {
@@ -289,6 +323,12 @@ int Editor::handleEvents() {
 			}
 			break;
 		case SDL_MOUSEBUTTONDOWN:
+#if defined(__ANDROID__)
+			if (showInput && event.button.button == SDL_BUTTON_LEFT) {
+				androidRequestScreenKeyboardOnTap();
+				break;
+			}
+#endif
 			if (showInput) break;
 			if (event.button.button == SDL_BUTTON_LEFT) {
 				int buttonIndex = 1;
