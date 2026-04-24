@@ -13,6 +13,29 @@
 #include "game.h"
 
 #if defined(__ANDROID__)
+// Prefer event.tfinger.touchId; SDL_GetTouchDevice(0) is not always the on-screen device on Android.
+static SDL_TouchID androidResolveMapTouchId(SDL_TouchID touchIdFromEvent) {
+    if (touchIdFromEvent > 0) {
+        return touchIdFromEvent;
+    }
+    const int n = SDL_GetNumTouchDevices();
+    for (int i = 0; i < n; ++i) {
+        const SDL_TouchID tid = SDL_GetTouchDevice(i);
+        if (tid == 0) {
+            continue;
+        }
+        if (SDL_GetTouchDeviceType(tid) == SDL_TOUCH_DEVICE_DIRECT) {
+            return tid;
+        }
+    }
+    if (n > 0) {
+        return SDL_GetTouchDevice(0);
+    }
+    return 0;
+}
+#endif
+
+#if defined(__ANDROID__)
 static bool keyIsBackOrEscape(const SDL_Keysym& keysym) {
     return keysym.sym == SDLK_ESCAPE || keysym.sym == SDLK_AC_BACK || keysym.scancode == SDL_SCANCODE_AC_BACK;
 }
@@ -56,6 +79,26 @@ static void maze_android_load_asset_lines(const std::string& path, std::vector<s
 }
 #endif
 
+// On Android, HUD and menu prerendered labels use 2x the legacy size; desktop keeps legacy sizes.
+#if defined(__ANDROID__)
+static constexpr float kInGameTextScale = 2.0f;
+#else
+static constexpr float kInGameTextScale = 1.0f;
+#endif
+
+// D-pad chevrons and choose-vehicle arrow buttons: same ">" scale for a square cell of this side
+// (d-pad uses full pad size s with cell s/3; we pass that cell size here to keep formulas aligned).
+static float chevronTextureScaleForCellSide(float boxSide, float tGlyph) {
+    const float t = fmaxf(1.0f, tGlyph);
+    const float sAsFullPad = 3.0f * boxSide;
+    float ts = fminf(4.2f, fmaxf(3.2f, sAsFullPad * 0.0135f)) * kInGameTextScale;
+    const float maxTs = 0.88f * boxSide / t;
+    if (ts > maxTs) {
+        ts = maxTs;
+    }
+    return ts;
+}
+
 Game::Game() {
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "SDL_Init", SDL_GetError(), nullptr);
@@ -95,6 +138,10 @@ Game::Game() {
     chatMode = false;
 #if defined(__ANDROID__)
     resetAndroidTouchKeyGestures();
+    androidMenuEnterTapActive = false;
+    androidMenuEnterTapFingerId = 0;
+    androidMenuEnterTapX = androidMenuEnterTapY = 0.0f;
+    androidMenuEnterTapStartTicks = 0;
 #endif
     screen = Screen::MENU;
     subMenu = SubMenu::MAIN;
@@ -544,6 +591,57 @@ void Game::run() {
 }
 
 #if defined(__ANDROID__)
+void Game::androidSetTextInputRect() {
+    int w = window->getWidth();
+    int h = window->getHeight();
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    SDL_Rect r;
+    if (screen == Screen::GAME && chatMode) {
+        float dpx, dpy, dps, dpc;
+        androidDpadGetLayout(dpx, dpy, dps, dpc);
+        (void)dpx;
+        (void)dpc;
+        // IME focus: region from above the d-pad (chat sits there on Android)
+        const int y0 = (int)(dpy - 12.0f - 52.0f);
+        r.x = 0;
+        r.y = (y0 > 0) ? y0 : (int)(h * 0.45f);
+        r.w = w;
+        r.h = h - r.y;
+    } else {
+        r.x = 0;
+        r.y = (int)(h * 0.35f);
+        r.w = w;
+        r.h = (int)(h * 0.30f);
+    }
+    SDL_SetTextInputRect(&r);
+}
+
+void Game::androidRequestScreenKeyboardOnTap() {
+    if (!window || !window->getWindow()) return;
+    const bool needOnScreenKeyboard =
+        (screen == Screen::MENU
+            && (subMenu == SubMenu::ENTER_PLAYER_NAME || subMenu == SubMenu::ENTER_SERVER_ADDRESS))
+        || (screen == Screen::GAME && chatMode);
+    if (!needOnScreenKeyboard) return;
+    // Only show IME on tap when it is not already up (avoid stop/start on every touch).
+    if (SDL_HasScreenKeyboardSupport() == SDL_TRUE) {
+        if (SDL_IsScreenKeyboardShown(window->getWindow()) == SDL_TRUE) {
+            return;
+        }
+    } else {
+        if (SDL_IsTextInputActive()) {
+            return;
+        }
+    }
+    if (SDL_IsTextInputActive()) {
+        SDL_StopTextInput();
+    }
+    SDL_StartTextInput();
+    androidSetTextInputRect();
+    SDL_RaiseWindow(window->getWindow());
+}
+
 void Game::syncAndroidTextInputState() {
     if (!window || !window->getWindow()) return;
     const bool needOnScreenKeyboard =
@@ -554,28 +652,20 @@ void Game::syncAndroidTextInputState() {
         if (!SDL_IsTextInputActive()) {
             SDL_StartTextInput();
         }
-        int w = window->getWidth();
-        int h = window->getHeight();
-        if (w < 1) w = 1;
-        if (h < 1) h = 1;
-        SDL_Rect r;
-        if (screen == Screen::GAME && chatMode) {
-            r.x = 0;
-            r.y = (int)(h * 0.65f);
-            r.w = w;
-            r.h = h - r.y;
-        } else {
-            r.x = 0;
-            r.y = (int)(h * 0.35f);
-            r.w = w;
-            r.h = (int)(h * 0.30f);
-        }
-        SDL_SetTextInputRect(&r);
+        androidSetTextInputRect();
     } else {
         if (SDL_IsTextInputActive()) {
             SDL_StopTextInput();
         }
     }
+}
+
+void Game::androidDismissChatAndKeyboard() {
+    if (!chatMode) {
+        return;
+    }
+    chatMode = false;
+    syncAndroidTextInputState();
 }
 #endif
 
