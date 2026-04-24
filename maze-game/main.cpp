@@ -2,6 +2,7 @@
 
 #ifndef CATCH_CONFIG_MAIN
 
+#include <cstdlib>
 #include <SDL_main.h>
 
 #include "game.h"
@@ -45,9 +46,15 @@ int main(int argc, char* argv[]) {
     maze_macos_chdir_to_bundle_resources_if_needed();
 #endif
 
-    Game game;
-    game.run();
-
+    {
+        Game game;
+        game.run();
+    }
+#if defined(__ANDROID__)
+    // Returning from main() is not enough: the SDL Activity often stays in the app switcher.
+    // Exit the process after Game's destructor (SDL_Quit, etc.) has run.
+    std::exit(0);
+#endif
     return 0;
 }
 
