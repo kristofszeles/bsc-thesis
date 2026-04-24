@@ -134,7 +134,7 @@ The game client is configured via `game-config.json`, which is auto-created with
 {
   "game": {
     "cameraFov": 60.0,
-    "mouseSensitivity": 0.2,
+    "mouseSensitivity": 0.27,
     "renderDistance": 30,
     "vehicle": 37,
     "singlePlayer": {

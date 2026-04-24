@@ -22,7 +22,7 @@ public:
     void init() {
         config["game"]["cameraFov"] = 60.0;
         config["game"]["renderDistance"] = 30;
-        config["game"]["mouseSensitivity"] = 0.2;
+        config["game"]["mouseSensitivity"] = 0.27f;
         config["game"]["vehicle"] = 0;
         config["game"]["singlePlayer"]["score"] = 0;
         config["game"]["singlePlayer"]["highScore"] = 0;

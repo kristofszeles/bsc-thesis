@@ -1,7 +1,7 @@
 {
   "game": {
     "cameraFov": 60.0,
-    "mouseSensitivity": 0.2,
+    "mouseSensitivity": 0.27,
     "renderDistance": 30,
     "singlePlayer": {
       "health": 9,
