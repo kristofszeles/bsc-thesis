@@ -1087,11 +1087,21 @@ int Game::handleMenuEvents() {
             {
                 const float w = (float)window->getWidth();
                 const float h = (float)window->getHeight();
-                androidMenuEnterTapActive = true;
-                androidMenuEnterTapFingerId = event.tfinger.fingerId;
-                androidMenuEnterTapX = event.tfinger.x * w;
-                androidMenuEnterTapY = event.tfinger.y * h;
-                androidMenuEnterTapStartTicks = SDL_GetTicks();
+                const float px = event.tfinger.x * w;
+                const float py = event.tfinger.y * h;
+                // Android reserves a strip on the left and right edges for the system back gesture.
+                // A swipe that starts there often arrives as a short FINGERDOWN/FINGERUP pair and
+                // would otherwise be misread as a blank-area tap-to-confirm (ENTER).
+                const float edgeInset = fmaxf(48.0f, w * 0.05f);
+                if (px <= edgeInset || px >= w - edgeInset) {
+                    androidMenuEnterTapActive = false;
+                } else {
+                    androidMenuEnterTapActive = true;
+                    androidMenuEnterTapFingerId = event.tfinger.fingerId;
+                    androidMenuEnterTapX = px;
+                    androidMenuEnterTapY = py;
+                    androidMenuEnterTapStartTicks = SDL_GetTicks();
+                }
             }
             break;
         case SDL_FINGERUP: {
@@ -1101,8 +1111,10 @@ int Game::handleMenuEvents() {
                 const float uxp = event.tfinger.x * w;
                 const float uyp = event.tfinger.y * h;
                 if (androidMenuEnterTapActive) {
+                    const float edgeInset = fmaxf(48.0f, w * 0.05f);
+                    const bool liftedAtEdge = (uxp <= edgeInset || uxp >= w - edgeInset);
                     const float d = std::hypot(uxp - androidMenuEnterTapX, uyp - androidMenuEnterTapY);
-                    if (d <= 32.0f && (float)(SDL_GetTicks() - androidMenuEnterTapStartTicks) <= 450.0f) {
+                    if (!liftedAtEdge && d <= 32.0f && (float)(SDL_GetTicks() - androidMenuEnterTapStartTicks) <= 450.0f) {
                         const int hit = menuApplyPointerUpAt(uxp, uyp);
                         if (hit > 0) {
                             clickedButtonIndex = hit;
