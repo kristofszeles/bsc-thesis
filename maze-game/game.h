@@ -105,41 +105,63 @@ private:
     void setPlayerScore(int amount) { playerScore = amount; }
     int getHighScore() const;
 #if defined(__ANDROID__)
-    void syncAndroidTextInputState();
-    void androidSetTextInputRect();
-    void androidRequestScreenKeyboardOnTap();
-    void androidDismissChatAndKeyboard();
-    void resetAndroidTouchKeyGestures();
-    bool androidLookTouchActive;
-    SDL_FingerID androidLookFingerId;
-    void androidDpadGetLayout(float& outX, float& outY, float& outSize, float& outCell) const;
-    bool androidDpadBoxContainsPoint(float px, float py) const;
-    // When `allowSlop` is true (finger move while d-pad held), tolerate slight thumb drift
-    // off the bottom edge of the pad so "down" does not spuriously clear when held.
-    int androidDpadDirectionAtPoint(float px, float py, bool allowSlop = false) const;
-    void drawAndroidDpadOverlays();
-    void androidGetViewToggleButtonLayout(float& outX, float& outY, float& outS) const;
-    bool androidViewToggleContainsPoint(float px, float py) const;
-    void drawAndroidViewToggleButton();
-    void androidToggleViewFromPointer();
-    void androidGetChatButtonLayout(float& outX, float& outY, float& outS) const;
-    bool androidChatButtonContainsPoint(float px, float py) const;
-    void drawAndroidChatButton();
-    void androidOpenChatFromPointer();
-    bool androidDpadActive;
-    int androidDpadDir;
-    SDL_FingerID androidDpadFingerId;
-    bool androidEnterTapActive;
-    SDL_FingerID androidEnterTapFingerId;
-    float androidEnterTapStartX, androidEnterTapStartY;
-    Uint32 androidEnterTapStartTicks;
-    float androidPinchLastDist;
-    void androidOnTwoFingerStateForMap(SDL_TouchID touchIdFromEvent);
-    bool androidUpdatePinchZoom(SDL_TouchID touchIdFromEvent);
-    bool androidMenuEnterTapActive;
-    SDL_FingerID androidMenuEnterTapFingerId;
-    float androidMenuEnterTapX, androidMenuEnterTapY;
-    Uint32 androidMenuEnterTapStartTicks;
+    struct Android {
+        struct Dpad {
+            bool active = false;
+            int dir = 0;
+            SDL_FingerID fingerId = 0;
+        };
+        struct Look {
+            bool touchActive = false;
+            SDL_FingerID fingerId = 0;
+        };
+        struct EnterTap {
+            bool active = false;
+            SDL_FingerID fingerId = 0;
+            float startX = 0.0f, startY = 0.0f;
+            Uint32 startTicks = 0;
+        };
+        struct MenuEnterTap {
+            bool active = false;
+            SDL_FingerID fingerId = 0;
+            float x = 0.0f, y = 0.0f;
+            Uint32 startTicks = 0;
+        };
+
+        Game* game = nullptr;
+        Dpad dpad;
+        Look look;
+        EnterTap enterTap;
+        MenuEnterTap menuEnterTap;
+        float pinchLastDist = 0.0f;
+
+        void setTextInputRect();
+        void requestScreenKeyboardOnTap();
+        void syncTextInputState();
+        void dismissChatAndKeyboard();
+        void resetTouchKeyGestures();
+
+        void dpadGetLayout(float& outX, float& outY, float& outSize, float& outCell) const;
+        bool dpadBoxContainsPoint(float px, float py) const;
+        // When `allowSlop` is true (finger move while d-pad held), tolerate slight thumb drift
+        // off the bottom edge of the pad so "down" does not spuriously clear when held.
+        int dpadDirectionAtPoint(float px, float py, bool allowSlop = false) const;
+        void drawDpadOverlays();
+
+        void viewToggleGetLayout(float& outX, float& outY, float& outS) const;
+        bool viewToggleContainsPoint(float px, float py) const;
+        void drawViewToggle();
+        void toggleViewFromPointer();
+
+        void chatButtonGetLayout(float& outX, float& outY, float& outS) const;
+        bool chatButtonContainsPoint(float px, float py) const;
+        void drawChatButton();
+        void openChatFromPointer();
+
+        void onTwoFingerStateForMap(SDL_TouchID touchIdFromEvent);
+        bool updatePinchZoom(SDL_TouchID touchIdFromEvent);
+    };
+    Android android;
 #endif
     GLuint loadShader(GLenum shaderType, std::string shaderData);
     GLuint linkShaders(const std::string& vertexShader, const std::string& fragmentShader);

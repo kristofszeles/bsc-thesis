@@ -137,11 +137,8 @@ Game::Game() {
     relativeMouseMode = false;
     chatMode = false;
 #if defined(__ANDROID__)
-    resetAndroidTouchKeyGestures();
-    androidMenuEnterTapActive = false;
-    androidMenuEnterTapFingerId = 0;
-    androidMenuEnterTapX = androidMenuEnterTapY = 0.0f;
-    androidMenuEnterTapStartTicks = 0;
+    android.game = this;
+    android.resetTouchKeyGestures();
 #endif
     screen = Screen::MENU;
     subMenu = SubMenu::MAIN;
@@ -573,7 +570,7 @@ void Game::run() {
                 gameMode = GameMode::IN_MENU;
                 setRelativeMouseMode(false);
 #if defined(__ANDROID__)
-                resetAndroidTouchKeyGestures();
+                android.resetTouchKeyGestures();
 #endif
             }
         } else if (screen == Screen::EDITOR) {
@@ -585,21 +582,21 @@ void Game::run() {
             subMenu = SubMenu::MAIN;
         }
 #if defined(__ANDROID__)
-        syncAndroidTextInputState();
+        android.syncTextInputState();
 #endif
     }
 }
 
 #if defined(__ANDROID__)
-void Game::androidSetTextInputRect() {
-    int w = window->getWidth();
-    int h = window->getHeight();
+void Game::Android::setTextInputRect() {
+    int w = game->window->getWidth();
+    int h = game->window->getHeight();
     if (w < 1) w = 1;
     if (h < 1) h = 1;
     SDL_Rect r;
-    if (screen == Screen::GAME && chatMode) {
+    if (game->screen == Screen::GAME && game->chatMode) {
         float dpx, dpy, dps, dpc;
-        androidDpadGetLayout(dpx, dpy, dps, dpc);
+        dpadGetLayout(dpx, dpy, dps, dpc);
         (void)dpx;
         (void)dpc;
         // IME focus: region from above the d-pad (chat sits there on Android)
@@ -617,16 +614,16 @@ void Game::androidSetTextInputRect() {
     SDL_SetTextInputRect(&r);
 }
 
-void Game::androidRequestScreenKeyboardOnTap() {
-    if (!window || !window->getWindow()) return;
+void Game::Android::requestScreenKeyboardOnTap() {
+    if (!game->window || !game->window->getWindow()) return;
     const bool needOnScreenKeyboard =
-        (screen == Screen::MENU
-            && (subMenu == SubMenu::ENTER_PLAYER_NAME || subMenu == SubMenu::ENTER_SERVER_ADDRESS))
-        || (screen == Screen::GAME && chatMode);
+        (game->screen == Screen::MENU
+            && (game->subMenu == SubMenu::ENTER_PLAYER_NAME || game->subMenu == SubMenu::ENTER_SERVER_ADDRESS))
+        || (game->screen == Screen::GAME && game->chatMode);
     if (!needOnScreenKeyboard) return;
     // Only show IME on tap when it is not already up (avoid stop/start on every touch).
     if (SDL_HasScreenKeyboardSupport() == SDL_TRUE) {
-        if (SDL_IsScreenKeyboardShown(window->getWindow()) == SDL_TRUE) {
+        if (SDL_IsScreenKeyboardShown(game->window->getWindow()) == SDL_TRUE) {
             return;
         }
     } else {
@@ -638,21 +635,21 @@ void Game::androidRequestScreenKeyboardOnTap() {
         SDL_StopTextInput();
     }
     SDL_StartTextInput();
-    androidSetTextInputRect();
-    SDL_RaiseWindow(window->getWindow());
+    setTextInputRect();
+    SDL_RaiseWindow(game->window->getWindow());
 }
 
-void Game::syncAndroidTextInputState() {
-    if (!window || !window->getWindow()) return;
+void Game::Android::syncTextInputState() {
+    if (!game->window || !game->window->getWindow()) return;
     const bool needOnScreenKeyboard =
-        (screen == Screen::MENU
-            && (subMenu == SubMenu::ENTER_PLAYER_NAME || subMenu == SubMenu::ENTER_SERVER_ADDRESS))
-        || (screen == Screen::GAME && chatMode);
+        (game->screen == Screen::MENU
+            && (game->subMenu == SubMenu::ENTER_PLAYER_NAME || game->subMenu == SubMenu::ENTER_SERVER_ADDRESS))
+        || (game->screen == Screen::GAME && game->chatMode);
     if (needOnScreenKeyboard) {
         if (!SDL_IsTextInputActive()) {
             SDL_StartTextInput();
         }
-        androidSetTextInputRect();
+        setTextInputRect();
     } else {
         if (SDL_IsTextInputActive()) {
             SDL_StopTextInput();
@@ -660,12 +657,12 @@ void Game::syncAndroidTextInputState() {
     }
 }
 
-void Game::androidDismissChatAndKeyboard() {
-    if (!chatMode) {
+void Game::Android::dismissChatAndKeyboard() {
+    if (!game->chatMode) {
         return;
     }
-    chatMode = false;
-    syncAndroidTextInputState();
+    game->chatMode = false;
+    syncTextInputState();
 }
 #endif
 
@@ -707,17 +704,17 @@ Game::MapEvent Game::handleMapEvents() {
                 if (event.button.which == SDL_TOUCH_MOUSEID) {
                     break;
                 }
-                androidDismissChatAndKeyboard();
+                android.dismissChatAndKeyboard();
                 break;
             }
             if (event.button.button == SDL_BUTTON_LEFT && !map->isGameOver()
-                && androidViewToggleContainsPoint((float)event.button.x, (float)event.button.y)) {
-                androidToggleViewFromPointer();
+                && android.viewToggleContainsPoint((float)event.button.x, (float)event.button.y)) {
+                android.toggleViewFromPointer();
                 break;
             }
             if (event.button.button == SDL_BUTTON_LEFT && !map->isGameOver() && gameMode == GameMode::MULTIPLAYER
-                && androidChatButtonContainsPoint((float)event.button.x, (float)event.button.y)) {
-                androidOpenChatFromPointer();
+                && android.chatButtonContainsPoint((float)event.button.x, (float)event.button.y)) {
+                android.openChatFromPointer();
                 break;
             }
 #endif
@@ -743,7 +740,7 @@ Game::MapEvent Game::handleMapEvents() {
             else if (keyIsBackOrEscape(event.key.keysym)) {
                 if (chatMode) {
 #if defined(__ANDROID__)
-                    androidDismissChatAndKeyboard();
+                    android.dismissChatAndKeyboard();
 #else
                     chatMode = false;
 #endif
@@ -796,10 +793,10 @@ Game::MapEvent Game::handleMapEvents() {
             const float px = event.tfinger.x * w;
             const float py = event.tfinger.y * h;
             if (chatMode) {
-                if (gameMode == GameMode::MULTIPLAYER && androidChatButtonContainsPoint(px, py)) {
-                    androidOpenChatFromPointer();
+                if (gameMode == GameMode::MULTIPLAYER && android.chatButtonContainsPoint(px, py)) {
+                    android.openChatFromPointer();
                 } else {
-                    androidDismissChatAndKeyboard();
+                    android.dismissChatAndKeyboard();
                 }
                 break;
             }
@@ -809,88 +806,88 @@ Game::MapEvent Game::handleMapEvents() {
                     setPlayerScore(0);
                     deleteMap();
                     generateMap(mazeWidth, mazeHeight);
-                    resetAndroidTouchKeyGestures();
+                    android.resetTouchKeyGestures();
                 }
                 break;
             }
-            if (androidViewToggleContainsPoint(px, py)) {
-                androidToggleViewFromPointer();
+            if (android.viewToggleContainsPoint(px, py)) {
+                android.toggleViewFromPointer();
                 break;
             }
-            if (gameMode == GameMode::MULTIPLAYER && androidChatButtonContainsPoint(px, py)) {
-                androidOpenChatFromPointer();
+            if (gameMode == GameMode::MULTIPLAYER && android.chatButtonContainsPoint(px, py)) {
+                android.openChatFromPointer();
                 break;
             }
-            if (!map->isGameOver() && androidDpadBoxContainsPoint(px, py)) {
-                androidDpadActive = true;
-                androidDpadFingerId = event.tfinger.fingerId;
-                androidDpadDir = androidDpadDirectionAtPoint(px, py);
+            if (!map->isGameOver() && android.dpadBoxContainsPoint(px, py)) {
+                android.dpad.active = true;
+                android.dpad.fingerId = event.tfinger.fingerId;
+                android.dpad.dir = android.dpadDirectionAtPoint(px, py);
             } else if (!map->isGameOver()) {
-                if (!androidLookTouchActive) {
-                    androidLookTouchActive = true;
-                    androidLookFingerId = event.tfinger.fingerId;
+                if (!android.look.touchActive) {
+                    android.look.touchActive = true;
+                    android.look.fingerId = event.tfinger.fingerId;
                 }
             }
-            if (!map->isGameOver() && !androidViewToggleContainsPoint(px, py) && !androidChatButtonContainsPoint(px, py)
-                && !androidDpadBoxContainsPoint(px, py)) {
-                androidEnterTapActive = true;
-                androidEnterTapFingerId = event.tfinger.fingerId;
-                androidEnterTapStartX = px;
-                androidEnterTapStartY = py;
-                androidEnterTapStartTicks = SDL_GetTicks();
+            if (!map->isGameOver() && !android.viewToggleContainsPoint(px, py) && !android.chatButtonContainsPoint(px, py)
+                && !android.dpadBoxContainsPoint(px, py)) {
+                android.enterTap.active = true;
+                android.enterTap.fingerId = event.tfinger.fingerId;
+                android.enterTap.startX = px;
+                android.enterTap.startY = py;
+                android.enterTap.startTicks = SDL_GetTicks();
             } else {
-                androidEnterTapActive = false;
+                android.enterTap.active = false;
             }
-            androidOnTwoFingerStateForMap(event.tfinger.touchId);
+            android.onTwoFingerStateForMap(event.tfinger.touchId);
             break;
         }
         case SDL_FINGERUP:
-            if (event.tfinger.fingerId == androidDpadFingerId) {
-                androidDpadActive = false;
-                androidDpadDir = 0;
+            if (event.tfinger.fingerId == android.dpad.fingerId) {
+                android.dpad.active = false;
+                android.dpad.dir = 0;
             }
-            if (event.tfinger.fingerId == androidLookFingerId) {
-                androidLookTouchActive = false;
+            if (event.tfinger.fingerId == android.look.fingerId) {
+                android.look.touchActive = false;
             }
             if (map->isGameOver()) {
-                androidEnterTapActive = false;
+                android.enterTap.active = false;
                 break;
             }
-            if (androidEnterTapActive && event.tfinger.fingerId == androidEnterTapFingerId) {
+            if (android.enterTap.active && event.tfinger.fingerId == android.enterTap.fingerId) {
                 const float w = (float)window->getWidth();
                 const float wheight = (float)window->getHeight();
                 const float uxp = event.tfinger.x * w;
                 const float uyp = event.tfinger.y * wheight;
-                const float d = std::hypot(uxp - androidEnterTapStartX, uyp - androidEnterTapStartY);
-                if (d <= 32.0f && (float)(SDL_GetTicks() - androidEnterTapStartTicks) <= 450.0f) {
+                const float d = std::hypot(uxp - android.enterTap.startX, uyp - android.enterTap.startY);
+                if (d <= 32.0f && (float)(SDL_GetTicks() - android.enterTap.startTicks) <= 450.0f) {
                     gameMapApplyEnterAction();
                 }
             }
-            if (event.tfinger.fingerId == androidEnterTapFingerId) {
-                androidEnterTapActive = false;
+            if (event.tfinger.fingerId == android.enterTap.fingerId) {
+                android.enterTap.active = false;
             }
             break;
         case SDL_FINGERMOTION:
             // TPS pinch-zoom first: it must win over one-finger yaw/pitch (uses event touch device id).
-            if (androidUpdatePinchZoom(event.tfinger.touchId)) {
+            if (android.updatePinchZoom(event.tfinger.touchId)) {
                 break;
             }
-            if (androidEnterTapActive && event.tfinger.fingerId == androidEnterTapFingerId) {
+            if (android.enterTap.active && event.tfinger.fingerId == android.enterTap.fingerId) {
                 const float w = (float)window->getWidth();
                 const float h = (float)window->getHeight();
                 const float mpx = event.tfinger.x * w;
                 const float mpy = event.tfinger.y * h;
-                if (std::hypot(mpx - androidEnterTapStartX, mpy - androidEnterTapStartY) > 32.0f) {
-                    androidEnterTapActive = false;
+                if (std::hypot(mpx - android.enterTap.startX, mpy - android.enterTap.startY) > 32.0f) {
+                    android.enterTap.active = false;
                 }
             }
-            if (event.tfinger.fingerId == androidDpadFingerId && androidDpadActive) {
+            if (event.tfinger.fingerId == android.dpad.fingerId && android.dpad.active) {
                 const float w = (float)window->getWidth();
                 const float h = (float)window->getHeight();
                 const float px = event.tfinger.x * w;
                 const float py = event.tfinger.y * h;
-                androidDpadDir = androidDpadDirectionAtPoint(px, py, true);
-            } else if (androidLookTouchActive && event.tfinger.fingerId == androidLookFingerId) {
+                android.dpad.dir = android.dpadDirectionAtPoint(px, py, true);
+            } else if (android.look.touchActive && event.tfinger.fingerId == android.look.fingerId) {
                 float sens = (float)config->getData()["game"]["mouseSensitivity"];
                 if (sens < 0.1f) sens = 0.1f;
                 else if (sens > 1.0f) sens = 1.0f;
@@ -910,10 +907,10 @@ void Game::handleMapKeyState() {
     if (!map->getPlayer()) return;
     if (!map->isGameOver()) {
 #if defined(__ANDROID__)
-        if (androidDpadActive) {
-            if (androidDpadDir != 0) {
+        if (android.dpad.active) {
+            if (android.dpad.dir != 0) {
                 map->getPlayer()->setAcceleration(1);
-                map->getPlayer()->setDirection(androidDpadDir);
+                map->getPlayer()->setDirection(android.dpad.dir);
             } else
                 map->getPlayer()->setAcceleration(0);
             return;
@@ -1027,7 +1024,7 @@ int Game::handleMenuEvents() {
         case SDL_MOUSEBUTTONDOWN:
             if (event.button.button == SDL_BUTTON_LEFT
                 && (subMenu == SubMenu::ENTER_PLAYER_NAME || subMenu == SubMenu::ENTER_SERVER_ADDRESS)) {
-                androidRequestScreenKeyboardOnTap();
+                android.requestScreenKeyboardOnTap();
             }
             break;
 #endif
@@ -1083,7 +1080,7 @@ int Game::handleMenuEvents() {
         }
 #if defined(__ANDROID__)
         case SDL_FINGERDOWN:
-            androidRequestScreenKeyboardOnTap();
+            android.requestScreenKeyboardOnTap();
             {
                 const float w = (float)window->getWidth();
                 const float h = (float)window->getHeight();
@@ -1094,27 +1091,27 @@ int Game::handleMenuEvents() {
                 // would otherwise be misread as a blank-area tap-to-confirm (ENTER).
                 const float edgeInset = fmaxf(48.0f, w * 0.05f);
                 if (px <= edgeInset || px >= w - edgeInset) {
-                    androidMenuEnterTapActive = false;
+                    android.menuEnterTap.active = false;
                 } else {
-                    androidMenuEnterTapActive = true;
-                    androidMenuEnterTapFingerId = event.tfinger.fingerId;
-                    androidMenuEnterTapX = px;
-                    androidMenuEnterTapY = py;
-                    androidMenuEnterTapStartTicks = SDL_GetTicks();
+                    android.menuEnterTap.active = true;
+                    android.menuEnterTap.fingerId = event.tfinger.fingerId;
+                    android.menuEnterTap.x = px;
+                    android.menuEnterTap.y = py;
+                    android.menuEnterTap.startTicks = SDL_GetTicks();
                 }
             }
             break;
         case SDL_FINGERUP: {
-            if (event.tfinger.fingerId == androidMenuEnterTapFingerId) {
+            if (event.tfinger.fingerId == android.menuEnterTap.fingerId) {
                 const float w = (float)window->getWidth();
                 const float h = (float)window->getHeight();
                 const float uxp = event.tfinger.x * w;
                 const float uyp = event.tfinger.y * h;
-                if (androidMenuEnterTapActive) {
+                if (android.menuEnterTap.active) {
                     const float edgeInset = fmaxf(48.0f, w * 0.05f);
                     const bool liftedAtEdge = (uxp <= edgeInset || uxp >= w - edgeInset);
-                    const float d = std::hypot(uxp - androidMenuEnterTapX, uyp - androidMenuEnterTapY);
-                    if (!liftedAtEdge && d <= 32.0f && (float)(SDL_GetTicks() - androidMenuEnterTapStartTicks) <= 450.0f) {
+                    const float d = std::hypot(uxp - android.menuEnterTap.x, uyp - android.menuEnterTap.y);
+                    if (!liftedAtEdge && d <= 32.0f && (float)(SDL_GetTicks() - android.menuEnterTap.startTicks) <= 450.0f) {
                         const int hit = menuApplyPointerUpAt(uxp, uyp);
                         if (hit > 0) {
                             clickedButtonIndex = hit;
@@ -1123,18 +1120,18 @@ int Game::handleMenuEvents() {
                         }
                     }
                 }
-                androidMenuEnterTapActive = false;
+                android.menuEnterTap.active = false;
             }
             break;
         }
         case SDL_FINGERMOTION:
-            if (androidMenuEnterTapActive && event.tfinger.fingerId == androidMenuEnterTapFingerId) {
+            if (android.menuEnterTap.active && event.tfinger.fingerId == android.menuEnterTap.fingerId) {
                 const float w = (float)window->getWidth();
                 const float h = (float)window->getHeight();
                 const float mpx = event.tfinger.x * w;
                 const float mpy = event.tfinger.y * h;
-                if (std::hypot(mpx - androidMenuEnterTapX, mpy - androidMenuEnterTapY) > 32.0f) {
-                    androidMenuEnterTapActive = false;
+                if (std::hypot(mpx - android.menuEnterTap.x, mpy - android.menuEnterTap.y) > 32.0f) {
+                    android.menuEnterTap.active = false;
                 }
             }
             break;
@@ -1309,10 +1306,7 @@ void Game::initMenu() {
     menu = new Menu(fonts.data());
     generateMap(mazeWidth, mazeHeight);
 #if defined(__ANDROID__)
-    androidMenuEnterTapActive = false;
-    androidMenuEnterTapFingerId = 0;
-    androidMenuEnterTapX = androidMenuEnterTapY = 0.0f;
-    androidMenuEnterTapStartTicks = 0;
+    android.menuEnterTap = Android::MenuEnterTap{};
 #endif
 }
 
@@ -1321,7 +1315,7 @@ void Game::gameMapApplyEnterAction() {
         client->sendChatMessage(inputText);
         chatMode = false;
 #if defined(__ANDROID__)
-        syncAndroidTextInputState();
+        android.syncTextInputState();
 #endif
     }
 }
@@ -1550,7 +1544,7 @@ void Game::drawHUD() {
         }
 #if defined(__ANDROID__)
         float dpx, dpy, dps, dpcell;
-        androidDpadGetLayout(dpx, dpy, dps, dpcell);
+        android.dpadGetLayout(dpx, dpy, dps, dpcell);
         (void)dpx;
         (void)dpcell;
         const float chatBottom = dpy - 12.0f * g;
@@ -1591,11 +1585,11 @@ void Game::drawHUD() {
     }
 #if defined(__ANDROID__)
     if (!map->isGameOver()) {
-        drawAndroidDpadOverlays();
+        android.drawDpadOverlays();
         if (gameMode == GameMode::MULTIPLAYER) {
-            drawAndroidChatButton();
+            android.drawChatButton();
         }
-        drawAndroidViewToggleButton();
+        android.drawViewToggle();
     }
 #endif
     setDrawModePerspective();
@@ -1655,25 +1649,16 @@ void Game::toggleCameraViewF2() {
 }
 
 #if defined(__ANDROID__)
-void Game::resetAndroidTouchKeyGestures() {
-    androidLookTouchActive = false;
-    androidLookFingerId = 0;
-    androidDpadActive = false;
-    androidDpadDir = 0;
-    androidDpadFingerId = 0;
-    androidEnterTapActive = false;
-    androidEnterTapFingerId = 0;
-    androidEnterTapStartX = androidEnterTapStartY = 0.0f;
-    androidEnterTapStartTicks = 0;
-    androidPinchLastDist = 0.0f;
-    androidMenuEnterTapActive = false;
-    androidMenuEnterTapFingerId = 0;
-    androidMenuEnterTapX = androidMenuEnterTapY = 0.0f;
-    androidMenuEnterTapStartTicks = 0;
+void Game::Android::resetTouchKeyGestures() {
+    dpad = Dpad{};
+    look = Look{};
+    enterTap = EnterTap{};
+    menuEnterTap = MenuEnterTap{};
+    pinchLastDist = 0.0f;
 }
 
-void Game::androidOnTwoFingerStateForMap(SDL_TouchID touchIdFromEvent) {
-    if (map->isGameOver()) return;
+void Game::Android::onTwoFingerStateForMap(SDL_TouchID touchIdFromEvent) {
+    if (game->map->isGameOver()) return;
     const SDL_TouchID dev = androidResolveMapTouchId(touchIdFromEvent);
     if (dev == 0) return;
     if (SDL_GetNumTouchFingers(dev) < 2) {
@@ -1684,67 +1669,67 @@ void Game::androidOnTwoFingerStateForMap(SDL_TouchID touchIdFromEvent) {
     if (!f0 || !f1) {
         return;
     }
-    const float w = (float)window->getWidth();
-    const float h = (float)window->getHeight();
+    const float w = (float)game->window->getWidth();
+    const float h = (float)game->window->getHeight();
     const float x0 = f0->x * w, y0 = f0->y * h, x1 = f1->x * w, y1 = f1->y * h;
-    if (androidDpadBoxContainsPoint(x0, y0) || androidDpadBoxContainsPoint(x1, y1)
-        || androidViewToggleContainsPoint(x0, y0) || androidViewToggleContainsPoint(x1, y1)
-        || androidChatButtonContainsPoint(x0, y0) || androidChatButtonContainsPoint(x1, y1)) {
+    if (dpadBoxContainsPoint(x0, y0) || dpadBoxContainsPoint(x1, y1)
+        || viewToggleContainsPoint(x0, y0) || viewToggleContainsPoint(x1, y1)
+        || chatButtonContainsPoint(x0, y0) || chatButtonContainsPoint(x1, y1)) {
         // D-pad, View, or Chat: pinch is not this gesture.
         return;
     }
     // Two-finger interaction in the main play area: cancel look/enter and start pinch baseline in TPS.
-    androidLookTouchActive = false;
-    androidEnterTapActive = false;
-    if (camera->getMode() == 1) {
-        androidPinchLastDist = 0.0f;
+    look.touchActive = false;
+    enterTap.active = false;
+    if (game->camera->getMode() == 1) {
+        pinchLastDist = 0.0f;
     }
 }
 
-bool Game::androidUpdatePinchZoom(SDL_TouchID touchIdFromEvent) {
-    if (map->isGameOver() || camera->getMode() != 1) {
-        androidPinchLastDist = 0.0f;
+bool Game::Android::updatePinchZoom(SDL_TouchID touchIdFromEvent) {
+    if (game->map->isGameOver() || game->camera->getMode() != 1) {
+        pinchLastDist = 0.0f;
         return false;
     }
     const SDL_TouchID dev = androidResolveMapTouchId(touchIdFromEvent);
     if (dev == 0) {
-        androidPinchLastDist = 0.0f;
+        pinchLastDist = 0.0f;
         return false;
     }
     const int nf = (int)SDL_GetNumTouchFingers(dev);
     if (nf < 2) {
-        androidPinchLastDist = 0.0f;
+        pinchLastDist = 0.0f;
         return false;
     }
     const SDL_Finger* f0 = SDL_GetTouchFinger(dev, 0);
     const SDL_Finger* f1 = SDL_GetTouchFinger(dev, 1);
     if (!f0 || !f1) {
-        androidPinchLastDist = 0.0f;
+        pinchLastDist = 0.0f;
         return false;
     }
-    const float w = (float)window->getWidth();
-    const float h = (float)window->getHeight();
+    const float w = (float)game->window->getWidth();
+    const float h = (float)game->window->getHeight();
     const float x0 = f0->x * w, y0 = f0->y * h, x1 = f1->x * w, y1 = f1->y * h;
-    if (androidDpadBoxContainsPoint(x0, y0) || androidDpadBoxContainsPoint(x1, y1)
-        || androidViewToggleContainsPoint(x0, y0) || androidViewToggleContainsPoint(x1, y1)
-        || androidChatButtonContainsPoint(x0, y0) || androidChatButtonContainsPoint(x1, y1)) {
-        androidPinchLastDist = 0.0f;
+    if (dpadBoxContainsPoint(x0, y0) || dpadBoxContainsPoint(x1, y1)
+        || viewToggleContainsPoint(x0, y0) || viewToggleContainsPoint(x1, y1)
+        || chatButtonContainsPoint(x0, y0) || chatButtonContainsPoint(x1, y1)) {
+        pinchLastDist = 0.0f;
         // Do not claim this motion: d-pad + look can run in parallel; no pinch in HUD mix.
         return false;
     }
     const float dist = std::hypot(x1 - x0, y1 - y0);
-    if (androidPinchLastDist > 0.0f) {
-        const float dd = dist - androidPinchLastDist;
+    if (pinchLastDist > 0.0f) {
+        const float dd = dist - pinchLastDist;
         // Pinch-to-zoom scale (higher = more sensitive; clamped in Camera::addZoomPinch).
-        camera->addZoomPinch(-0.055f * dd);
+        game->camera->addZoomPinch(-0.055f * dd);
     }
-    androidPinchLastDist = dist;
+    pinchLastDist = dist;
     return true;
 }
 
-void Game::androidGetViewToggleButtonLayout(float& outX, float& outY, float& outS) const {
-    const float w = (float)window->getWidth();
-    const float h = (float)window->getHeight();
+void Game::Android::viewToggleGetLayout(float& outX, float& outY, float& outS) const {
+    const float w = (float)game->window->getWidth();
+    const float h = (float)game->window->getHeight();
     const float m = 16.0f;
     float s = w < h ? w : h;
     s *= 0.12f;
@@ -1759,20 +1744,20 @@ void Game::androidGetViewToggleButtonLayout(float& outX, float& outY, float& out
     outY = h - m - s;
 }
 
-bool Game::androidViewToggleContainsPoint(float px, float py) const {
+bool Game::Android::viewToggleContainsPoint(float px, float py) const {
     float x, y, s;
-    androidGetViewToggleButtonLayout(x, y, s);
+    viewToggleGetLayout(x, y, s);
     return px >= x && py >= y && px <= x + s && py <= y + s;
 }
 
-void Game::drawAndroidViewToggleButton() {
+void Game::Android::drawViewToggle() {
     float x, y, s;
-    androidGetViewToggleButtonLayout(x, y, s);
+    viewToggleGetLayout(x, y, s);
     const SDL_Color plate = { 40, 40, 52 };
     const SDL_Color inner = { 60, 60, 78 };
-    drawUtils->drawRectangle(plate, x - 2.0f, y - 2.0f, s + 4.0f, s + 4.0f);
-    drawUtils->drawRectangle(inner, x, y, s, s);
-    std::unique_ptr<Texture> t(renderText("View", fonts.data()));
+    game->drawUtils->drawRectangle(plate, x - 2.0f, y - 2.0f, s + 4.0f, s + 4.0f);
+    game->drawUtils->drawRectangle(inner, x, y, s, s);
+    std::unique_ptr<Texture> t(renderText("View", game->fonts.data()));
     float scale = fminf(1.85f, fmaxf(1.15f, s * 0.09f)) * kInGameTextScale;
     {
         const float pad = 4.0f;
@@ -1783,26 +1768,26 @@ void Game::drawAndroidViewToggleButton() {
     }
     const float tw = t->getWidth() * scale;
     const float th = t->getHeight() * scale;
-    drawUtils->drawTexture2D(t.get(), x + (s - tw) * 0.5f, y + (s - th) * 0.5f, scale);
+    game->drawUtils->drawTexture2D(t.get(), x + (s - tw) * 0.5f, y + (s - th) * 0.5f, scale);
 }
 
-void Game::androidToggleViewFromPointer() {
+void Game::Android::toggleViewFromPointer() {
     // A single touch typically generates both SDL_FINGER* and a synthetic mouse event; each would
     // call toggle and cancel out. Coalesce to one flip per user tap.
     static Uint32 s_lastMs = 0;
     const Uint32 t = SDL_GetTicks();
     if (t - s_lastMs < 180) return;
     s_lastMs = t;
-    toggleCameraViewF2();
+    game->toggleCameraViewF2();
 }
 
-void Game::androidGetChatButtonLayout(float& outX, float& outY, float& outS) const {
-    if (gameMode != GameMode::MULTIPLAYER) {
+void Game::Android::chatButtonGetLayout(float& outX, float& outY, float& outS) const {
+    if (game->gameMode != GameMode::MULTIPLAYER) {
         outX = outY = outS = 0.0f;
         return;
     }
     float vx, vy, s;
-    androidGetViewToggleButtonLayout(vx, vy, s);
+    viewToggleGetLayout(vx, vy, s);
     const float gap = 8.0f;
     outS = s;
     outX = vx - gap - s;
@@ -1813,29 +1798,29 @@ void Game::androidGetChatButtonLayout(float& outX, float& outY, float& outS) con
     outY = vy;
 }
 
-bool Game::androidChatButtonContainsPoint(float px, float py) const {
-    if (gameMode != GameMode::MULTIPLAYER) {
+bool Game::Android::chatButtonContainsPoint(float px, float py) const {
+    if (game->gameMode != GameMode::MULTIPLAYER) {
         return false;
     }
     float x, y, s;
-    androidGetChatButtonLayout(x, y, s);
+    chatButtonGetLayout(x, y, s);
     if (s <= 0.0f) {
         return false;
     }
     return px >= x && py >= y && px <= x + s && py <= y + s;
 }
 
-void Game::drawAndroidChatButton() {
-    if (gameMode != GameMode::MULTIPLAYER) {
+void Game::Android::drawChatButton() {
+    if (game->gameMode != GameMode::MULTIPLAYER) {
         return;
     }
     float x, y, s;
-    androidGetChatButtonLayout(x, y, s);
+    chatButtonGetLayout(x, y, s);
     const SDL_Color plate = { 40, 40, 52 };
     const SDL_Color inner = { 60, 60, 78 };
-    drawUtils->drawRectangle(plate, x - 2.0f, y - 2.0f, s + 4.0f, s + 4.0f);
-    drawUtils->drawRectangle(inner, x, y, s, s);
-    std::unique_ptr<Texture> t(renderText("Chat", fonts.data()));
+    game->drawUtils->drawRectangle(plate, x - 2.0f, y - 2.0f, s + 4.0f, s + 4.0f);
+    game->drawUtils->drawRectangle(inner, x, y, s, s);
+    std::unique_ptr<Texture> t(renderText("Chat", game->fonts.data()));
     float scale = fminf(1.85f, fmaxf(1.15f, s * 0.09f)) * kInGameTextScale;
     {
         const float pad = 4.0f;
@@ -1846,11 +1831,11 @@ void Game::drawAndroidChatButton() {
     }
     const float tw = t->getWidth() * scale;
     const float th = t->getHeight() * scale;
-    drawUtils->drawTexture2D(t.get(), x + (s - tw) * 0.5f, y + (s - th) * 0.5f, scale);
+    game->drawUtils->drawTexture2D(t.get(), x + (s - tw) * 0.5f, y + (s - th) * 0.5f, scale);
 }
 
-void Game::androidOpenChatFromPointer() {
-    if (map->isGameOver() || gameMode != GameMode::MULTIPLAYER) {
+void Game::Android::openChatFromPointer() {
+    if (game->map->isGameOver() || game->gameMode != GameMode::MULTIPLAYER) {
         return;
     }
     static Uint32 s_lastMs = 0;
@@ -1859,18 +1844,18 @@ void Game::androidOpenChatFromPointer() {
         return;
     }
     s_lastMs = t;
-    if (!chatMode) {
-        chatMode = true;
-        inputText = "";
+    if (!game->chatMode) {
+        game->chatMode = true;
+        game->inputText = "";
         SDL_PumpEvents();
         SDL_FlushEvent(SDL_TEXTINPUT);
     }
-    androidRequestScreenKeyboardOnTap();
+    requestScreenKeyboardOnTap();
 }
 
-void Game::androidDpadGetLayout(float& outX, float& outY, float& outSize, float& outCell) const {
-    const float w = (float)window->getWidth();
-    const float h = (float)window->getHeight();
+void Game::Android::dpadGetLayout(float& outX, float& outY, float& outSize, float& outCell) const {
+    const float w = (float)game->window->getWidth();
+    const float h = (float)game->window->getHeight();
     const float m = 16.0f;
     float s = w < h ? w : h;
     s *= 0.35f;
@@ -1882,17 +1867,17 @@ void Game::androidDpadGetLayout(float& outX, float& outY, float& outSize, float&
     outCell = s / 3.0f;
 }
 
-bool Game::androidDpadBoxContainsPoint(float px, float py) const {
+bool Game::Android::dpadBoxContainsPoint(float px, float py) const {
     float x0, y0, s, cell;
-    androidDpadGetLayout(x0, y0, s, cell);
+    dpadGetLayout(x0, y0, s, cell);
     (void)cell;
     return px >= x0 && py >= y0 && px <= x0 + s && py <= y0 + s;
 }
 
 // 3x3 grid: four arms (U/D/L/R), center and corners inert = no movement
-int Game::androidDpadDirectionAtPoint(float px, float py, bool allowSlop) const {
+int Game::Android::dpadDirectionAtPoint(float px, float py, bool allowSlop) const {
     float x0, y0, s, cell;
-    androidDpadGetLayout(x0, y0, s, cell);
+    dpadGetLayout(x0, y0, s, cell);
     if (px < x0 || px > x0 + s) {
         return 0;
     }
@@ -1917,10 +1902,10 @@ int Game::androidDpadDirectionAtPoint(float px, float py, bool allowSlop) const 
     return 0;
 }
 
-void Game::drawAndroidDpadOverlays() {
-    if (map->isGameOver()) return;
+void Game::Android::drawDpadOverlays() {
+    if (game->map->isGameOver()) return;
     float x0, y0, s, cell;
-    androidDpadGetLayout(x0, y0, s, cell);
+    dpadGetLayout(x0, y0, s, cell);
     const float oCol[3] = {0.0f, cell, 2.0f * cell};
     const float wCol[3] = {cell, cell, cell};
     const float oRow[3] = {0.0f, cell, 2.0f * cell};
@@ -1928,7 +1913,7 @@ void Game::drawAndroidDpadOverlays() {
     const SDL_Color plate = { 40, 40, 52 };
     const SDL_Color cellIdle = { 70, 70, 90 };
     const SDL_Color cellHi = { 120, 130, 180 };
-    drawUtils->drawRectangle(plate, x0 - 4.0f, y0 - 4.0f, s + 8.0f, s + 8.0f);
+    game->drawUtils->drawRectangle(plate, x0 - 4.0f, y0 - 4.0f, s + 8.0f, s + 8.0f);
     for (int row = 0; row < 3; ++row) {
         for (int col = 0; col < 3; ++col) {
             int d = 0;
@@ -1936,19 +1921,19 @@ void Game::drawAndroidDpadOverlays() {
             else if (row == 2 && col == 1) d = (int)Direction::BACKWARD;
             else if (row == 1 && col == 0) d = (int)Direction::LEFT;
             else if (row == 1 && col == 2) d = (int)Direction::RIGHT;
-            const bool on = (androidDpadDir == d);
+            const bool on = (dpad.dir == d);
             const SDL_Color& c = (d != 0 && on) ? cellHi : (d != 0 ? cellIdle : plate);
             const float gap = 2.0f;
             const float cx = x0 + oCol[col] + gap;
             const float cy = y0 + oRow[row] + gap;
-            drawUtils->drawRectangle(c, cx, cy, wCol[col] - 2.0f * gap, hRow[row] - 2.0f * gap);
+            game->drawUtils->drawRectangle(c, cx, cy, wCol[col] - 2.0f * gap, hRow[row] - 2.0f * gap);
         }
     }
     // Direction glyphs from specials.png: 6=right >, 7=left <, 8=up ^, 9=down (chevron; use renderSpecialsGlyph(9), not letter "v")
-    std::unique_ptr<Texture> tR(renderSpecialsGlyph(6, fonts.data()));
-    std::unique_ptr<Texture> tL(renderSpecialsGlyph(7, fonts.data()));
-    std::unique_ptr<Texture> tU(renderSpecialsGlyph(8, fonts.data()));
-    std::unique_ptr<Texture> tD(renderSpecialsGlyph(9, fonts.data()));
+    std::unique_ptr<Texture> tR(renderSpecialsGlyph(6, game->fonts.data()));
+    std::unique_ptr<Texture> tL(renderSpecialsGlyph(7, game->fonts.data()));
+    std::unique_ptr<Texture> tU(renderSpecialsGlyph(8, game->fonts.data()));
+    std::unique_ptr<Texture> tD(renderSpecialsGlyph(9, game->fonts.data()));
     const float tGlyph = fmaxf(1.0f, fmaxf(
         fmaxf(fmaxf((float)tR->getWidth(), (float)tR->getHeight()), fmaxf((float)tD->getWidth(), (float)tD->getHeight())),
         fmaxf(fmaxf((float)tL->getWidth(), (float)tL->getHeight()), fmaxf((float)tU->getWidth(), (float)tU->getHeight()))));
@@ -1958,7 +1943,7 @@ void Game::drawAndroidDpadOverlays() {
         const float ah = t->getHeight() * ts;
         const float ccx = x0 + oCol[col] + 0.5f * wCol[col];
         const float ccy = y0 + oRow[row] + 0.5f * hRow[row];
-        drawUtils->drawTexture2D(t, ccx - 0.5f * aw, ccy - 0.5f * ah, ts, 0, 0, 0.0f);
+        game->drawUtils->drawTexture2D(t, ccx - 0.5f * aw, ccy - 0.5f * ah, ts, 0, 0, 0.0f);
     };
     drawArrow(tU.get(), 0, 1);
     drawArrow(tD.get(), 2, 1);

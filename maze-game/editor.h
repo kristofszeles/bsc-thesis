@@ -65,9 +65,13 @@ private:
 	void handleMouse();
 	void initButtons();
 #if defined(__ANDROID__)
-	void syncAndroidTextInputState();
-	void androidSetTextInputRect();
-	void androidRequestScreenKeyboardOnTap();
+	struct Android {
+		Editor* editor = nullptr;
+		void setTextInputRect();
+		void requestScreenKeyboardOnTap();
+		void syncTextInputState();
+	};
+	Android android;
 #endif
 public:
 	Editor(DrawUtils* drawUtils = nullptr);

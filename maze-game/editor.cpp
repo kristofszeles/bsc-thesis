@@ -17,6 +17,7 @@ static bool keyIsBackOrEscape(const SDL_Keysym& keysym) {
 Editor::Editor(DrawUtils* drawUtils) : drawUtils(drawUtils) {
 #if defined(__ANDROID__)
 	SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+	android.editor = this;
 #endif
 	selectedBlock = nullptr;
 	start = nullptr;
@@ -75,14 +76,14 @@ void Editor::run() {
 		if (!showInput) handleMouse();
 		updateFrame();
 #if defined(__ANDROID__)
-		syncAndroidTextInputState();
+		android.syncTextInputState();
 #endif
 	}
 }
 
 #if defined(__ANDROID__)
-void Editor::androidSetTextInputRect() {
-	Window* win = drawUtils->getWindow();
+void Editor::Android::setTextInputRect() {
+	Window* win = editor->drawUtils->getWindow();
 	if (!win) return;
 	int w = win->getWidth();
 	int h = win->getHeight();
@@ -96,9 +97,9 @@ void Editor::androidSetTextInputRect() {
 	SDL_SetTextInputRect(&r);
 }
 
-void Editor::androidRequestScreenKeyboardOnTap() {
-	if (!showInput) return;
-	Window* win = drawUtils->getWindow();
+void Editor::Android::requestScreenKeyboardOnTap() {
+	if (!editor->showInput) return;
+	Window* win = editor->drawUtils->getWindow();
 	if (!win || !win->getWindow()) return;
 	if (SDL_HasScreenKeyboardSupport() == SDL_TRUE) {
 		if (SDL_IsScreenKeyboardShown(win->getWindow()) == SDL_TRUE) {
@@ -113,18 +114,18 @@ void Editor::androidRequestScreenKeyboardOnTap() {
 		SDL_StopTextInput();
 	}
 	SDL_StartTextInput();
-	androidSetTextInputRect();
+	setTextInputRect();
 	SDL_RaiseWindow(win->getWindow());
 }
 
-void Editor::syncAndroidTextInputState() {
-	Window* win = drawUtils->getWindow();
+void Editor::Android::syncTextInputState() {
+	Window* win = editor->drawUtils->getWindow();
 	if (!win || !win->getWindow()) return;
-	if (showInput) {
+	if (editor->showInput) {
 		if (!SDL_IsTextInputActive()) {
 			SDL_StartTextInput();
 		}
-		androidSetTextInputRect();
+		setTextInputRect();
 	} else {
 		if (SDL_IsTextInputActive()) {
 			SDL_StopTextInput();
@@ -310,7 +311,7 @@ int Editor::handleEvents() {
 #if defined(__ANDROID__)
 		case SDL_FINGERDOWN:
 			if (showInput) {
-				androidRequestScreenKeyboardOnTap();
+				android.requestScreenKeyboardOnTap();
 			}
 			break;
 #endif
@@ -325,7 +326,7 @@ int Editor::handleEvents() {
 		case SDL_MOUSEBUTTONDOWN:
 #if defined(__ANDROID__)
 			if (showInput && event.button.button == SDL_BUTTON_LEFT) {
-				androidRequestScreenKeyboardOnTap();
+				android.requestScreenKeyboardOnTap();
 				break;
 			}
 #endif
