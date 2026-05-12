@@ -420,7 +420,9 @@ Texture* renderText(const std::string& text, SDL_Surface** fonts) {
         if (text[i] >= '0' && text[i] <= '9') {
             int id = text[i] - '0';
             src.x = id * 9;
+            const int penX = dst.x;
             SDL_BlitSurface(fonts[0], &src, surface, &dst);
+            lineRightMax = (std::max)(lineRightMax, penX + 9);
             if (id == 1)
                 dst.x += 4;
             else
@@ -428,7 +430,9 @@ Texture* renderText(const std::string& text, SDL_Surface** fonts) {
         } else if (text[i] >= 'A' && text[i] <= 'Z') {
             int id = text[i] - 'A';
             src.x = id * 9;
+            const int penX = dst.x;
             SDL_BlitSurface(fonts[1], &src, surface, &dst);
+            lineRightMax = (std::max)(lineRightMax, penX + 9);
             if (id == 8)
                 dst.x += 6;
             else if (id == 12)
@@ -442,7 +446,9 @@ Texture* renderText(const std::string& text, SDL_Surface** fonts) {
         } else if (text[i] >= 'a' && text[i] <= 'z') {
             int id = text[i] - 'a';
             src.x = id * 9;
+            const int penX = dst.x;
             SDL_BlitSurface(fonts[2], &src, surface, &dst);
+            lineRightMax = (std::max)(lineRightMax, penX + 9);
             if (id == 2 || id == 5 || id == 9 || id == 19)
                 dst.x += 6;
             else if (id == 8 || id == 11)
@@ -492,6 +498,7 @@ Texture* renderText(const std::string& text, SDL_Surface** fonts) {
                 src = {id * 9, 0, 9, 9};
                 dst = {penX, 0, 9, 9};
                 SDL_BlitSurface(fonts[3], &src, surface, &dst);
+                lineRightMax = (std::max)(lineRightMax, penX + 9);
                 if (id == 1) {
                     dst.x = penX + 8;
                 } else if (id == 4) {
