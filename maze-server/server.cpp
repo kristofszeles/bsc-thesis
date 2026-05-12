@@ -1,6 +1,5 @@
 #include <iostream>
 #include <filesystem>
-#include <set>
 #include <string>
 #include <vector>
 #include <sole.hpp>
@@ -11,13 +10,11 @@
 #endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#include <iphlpapi.h>
-#pragma comment(lib, "iphlpapi.lib")
 #else
-#include <ifaddrs.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <unistd.h>
 #endif
 
 #include "serverthread.h"
@@ -25,62 +22,47 @@
 
 namespace {
 
-std::vector<std::string> localNetworkIPv4Strings() {
-    std::set<std::string> unique;
+// Returns the local IPv4 the OS would use for outbound traffic — i.e. the
+// address a client on the same LAN should connect to. Picks one interface
+// instead of dumping every adapter (VPN, docker bridges, virtual NICs).
+std::string primaryLocalIPv4String() {
 #ifdef _WIN32
-    ULONG bufLen = 15000;
-    std::vector<BYTE> buffer(bufLen);
-    auto* addresses = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer.data());
-    ULONG ret = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
-                                     nullptr, addresses, &bufLen);
-    if (ret == ERROR_BUFFER_OVERFLOW) {
-        buffer.resize(bufLen);
-        addresses = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer.data());
-        ret = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
-                                   nullptr, addresses, &bufLen);
-    }
-    if (ret != NO_ERROR) {
-        return {};
-    }
-    for (auto* aa = addresses; aa; aa = aa->Next) {
-        if (aa->OperStatus != IfOperStatusUp) {
-            continue;
-        }
-        for (auto* ua = aa->FirstUnicastAddress; ua; ua = ua->Next) {
-            if (!ua->Address.lpSockaddr || ua->Address.lpSockaddr->sa_family != AF_INET) {
-                continue;
-            }
-            auto* sin = reinterpret_cast<sockaddr_in*>(ua->Address.lpSockaddr);
-            if (sin->sin_addr.s_addr == htonl(INADDR_LOOPBACK)) {
-                continue;
-            }
-            char buf[INET_ADDRSTRLEN];
-            if (InetNtopA(AF_INET, &sin->sin_addr, buf, INET_ADDRSTRLEN)) {
-                unique.insert(buf);
-            }
-        }
-    }
+    SOCKET s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s == INVALID_SOCKET) return {};
 #else
-    ifaddrs* ifa = nullptr;
-    if (getifaddrs(&ifa) != 0) {
-        return {};
-    }
-    for (ifaddrs* p = ifa; p; p = p->ifa_next) {
-        if (!p->ifa_addr || p->ifa_addr->sa_family != AF_INET) {
-            continue;
-        }
-        auto* a = reinterpret_cast<sockaddr_in*>(p->ifa_addr);
-        if (a->sin_addr.s_addr == htonl(INADDR_LOOPBACK)) {
-            continue;
-        }
-        char buf[INET_ADDRSTRLEN];
-        if (inet_ntop(AF_INET, &a->sin_addr, buf, sizeof(buf))) {
-            unique.insert(buf);
-        }
-    }
-    freeifaddrs(ifa);
+    int s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s < 0) return {};
 #endif
-    return std::vector<std::string>(unique.begin(), unique.end());
+    sockaddr_in remote{};
+    remote.sin_family = AF_INET;
+    remote.sin_port = htons(53);
+    remote.sin_addr.s_addr = inet_addr("8.8.8.8");
+
+    std::string result;
+    if (connect(s, reinterpret_cast<sockaddr*>(&remote), sizeof(remote)) == 0) {
+        sockaddr_in local{};
+#ifdef _WIN32
+        int len = sizeof(local);
+#else
+        socklen_t len = sizeof(local);
+#endif
+        if (getsockname(s, reinterpret_cast<sockaddr*>(&local), &len) == 0) {
+            char buf[INET_ADDRSTRLEN];
+#ifdef _WIN32
+            if (InetNtopA(AF_INET, &local.sin_addr, buf, INET_ADDRSTRLEN)) {
+#else
+            if (inet_ntop(AF_INET, &local.sin_addr, buf, sizeof(buf))) {
+#endif
+                result = buf;
+            }
+        }
+    }
+#ifdef _WIN32
+    closesocket(s);
+#else
+    close(s);
+#endif
+    return result;
 }
 
 }  // namespace
@@ -110,16 +92,9 @@ Server::Server() {
         exit(1);
     }
     std::cout << "Listening on port " << port;
-    std::vector<std::string> addrs = localNetworkIPv4Strings();
-    if (!addrs.empty()) {
-        std::cout << " (";
-        for (size_t i = 0; i < addrs.size(); ++i) {
-            if (i > 0) {
-                std::cout << ", ";
-            }
-            std::cout << addrs[i];
-        }
-        std::cout << ")";
+    std::string addr = primaryLocalIPv4String();
+    if (!addr.empty()) {
+        std::cout << " (" << addr << ")";
     }
     std::cout << "..." << std::endl;
     std::string mapFile = config->getData()["server"]["mapFile"];
