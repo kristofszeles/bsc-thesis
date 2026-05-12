@@ -30,7 +30,19 @@ Window::Window(const std::string& windowTitle, int windowWidth, int windowHeight
 #endif
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    setViewportSize(windowWidth, windowHeight);
+    // The OS may resize the window away from the requested dimensions (Android forces fullscreen
+    // to the device surface; maximized desktop windows snap to the workspace). Pick up the real
+    // size now so the loading screen, drawn before any SIZE_CHANGED event, uses correct extents.
+    // Assign to the members explicitly — the constructor's parameters shadow them, so plain
+    // `windowWidth = ...` would only update the locals and leave getWidth()/getHeight() stale.
+    int actualW = this->windowWidth, actualH = this->windowHeight;
+    SDL_GetWindowSize(window, &actualW, &actualH);
+    if (actualW > 0 && actualH > 0) {
+        this->windowWidth = actualW;
+        this->windowHeight = actualH;
+    }
+    setViewportSize(this->windowWidth, this->windowHeight);
+    setProjectionMatrixSize(this->windowWidth, this->windowHeight);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     SDL_GL_SetSwapInterval(1); // enable vsync

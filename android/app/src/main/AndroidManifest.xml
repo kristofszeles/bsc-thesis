@@ -17,7 +17,7 @@
             android:name="org.libsdl.app.SDLActivity"
             android:configChanges="layoutDirection|locale|orientation|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
             android:exported="true"
-            android:screenOrientation="sensorLandscape">
+            android:screenOrientation="fullUser">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
