@@ -1452,32 +1452,41 @@ void Game::drawMap() {
 void Game::drawEntities() {
     Position playerPos;
     if (map->getPlayer()) playerPos = map->getPlayer()->getPosition();
+    // Match the shader's culling metric: it fades opacity by Euclidean distance from playerPos,
+    // reaching fully transparent at renderDistance. Skip anything past that radius on the CPU
+    // so we do not run the vertex + fragment pipeline for entities that would draw zero pixels.
+    const float renderDistance = (float)(int)config->getData()["game"]["renderDistance"];
+    const float renderDistance2 = renderDistance * renderDistance;
+    auto withinRenderRadius = [&](const Position& p) {
+        const float dx = p.x - playerPos.x;
+        const float dy = p.y - playerPos.y;
+        const float dz = p.z - playerPos.z;
+        return dx * dx + dy * dy + dz * dz <= renderDistance2;
+    };
     for (auto& entity : map->getEntities()) {
-        Position entityPos = entity->getPosition();
-        int renderDistance = config->getData()["game"]["renderDistance"];
-        if (entityPos.x >= playerPos.x - renderDistance && entityPos.x <= playerPos.x + renderDistance && entityPos.z >= playerPos.z - renderDistance && entityPos.z <= playerPos.z + renderDistance) {
-            if (!entity->isHidden() && !entity->isItem() && entity != map->getPlayer()) {
-                drawMesh(entity->getPosition(), entity->getMesh(), m_programID_1);
-            }
+        const Position& entityPos = entity->getPosition();
+        if (!withinRenderRadius(entityPos)) continue;
+        if (!entity->isHidden() && !entity->isItem() && entity != map->getPlayer()) {
+            drawMesh(entityPos, entity->getMesh(), m_programID_1);
         }
     }
     for (auto& opponent : map->getOpponents()) {
         Position opponentPos = opponent.second->getPosition();
+        if (!withinRenderRadius(opponentPos)) continue;
         opponentPos.angleY += 180;
         drawMesh(opponentPos, opponent.second->getMesh(), m_programID_1);
     }
     for (auto& item : map->getItems()) {
-        Position itemPos = item->getPosition();
-        int renderDistance = config->getData()["game"]["renderDistance"];
-        if (itemPos.x >= playerPos.x - renderDistance && itemPos.x <= playerPos.x + renderDistance && itemPos.z >= playerPos.z - renderDistance && itemPos.z <= playerPos.z + renderDistance) {
-            if (!item->isHidden()) {
-                drawMesh(item->getPosition(), item->getMesh(), m_programID_1);
-            }
+        const Position& itemPos = item->getPosition();
+        if (!withinRenderRadius(itemPos)) continue;
+        if (!item->isHidden()) {
+            drawMesh(itemPos, item->getMesh(), m_programID_1);
         }
     }
     for (auto& opponent : map->getOpponents()) {
-        if (!opponent.second->getBillboard()) opponent.second->setBillboard(renderText(opponent.second->getName(), fonts.data()));
         Position pos = opponent.second->getPosition();
+        if (!withinRenderRadius(pos)) continue;
+        if (!opponent.second->getBillboard()) opponent.second->setBillboard(renderText(opponent.second->getName(), fonts.data()));
         drawBillboard({ pos.x, pos.y + 2.0f, pos.z }, opponent.second->getBillboard());
     }
 }
