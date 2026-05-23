@@ -106,6 +106,9 @@ Game::Game() {
     }
 #if defined(__ANDROID__)
     SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+    // Allow every orientation; the rest of the rendering path (Window's startup size query and
+    // drawLoadingScreen's per-draw resync) adapts to whatever surface the OS hands us.
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "Portrait PortraitUpsideDown LandscapeLeft LandscapeRight");
     {
         // SDL_GetBasePath is unsupported on Android; asset paths are relative to the APK asset root.
         assetRoot.clear();
@@ -1620,6 +1623,19 @@ void Game::drawHUD() {
 }
 
 void Game::drawLoadingScreen() {
+    // The surface may have changed size since SDL_CreateWindow — Android's sensorLandscape
+    // rotation, immersive/fullscreen transitions, or a follow-up surfaceChanged from the OS
+    // all arrive as SDL_WINDOWEVENT_RESIZED. Pump events so SDL applies them to window->w/h,
+    // then resync the viewport and 2D projection so the loading screen fills the real surface
+    // instead of stretching against a stale viewport.
+    SDL_PumpEvents();
+    int curW = 0, curH = 0;
+    SDL_GetWindowSize(window->getWindow(), &curW, &curH);
+    if (curW > 0 && curH > 0 && (curW != window->getWidth() || curH != window->getHeight())) {
+        window->setWindowSize(curW, curH);
+        window->setViewportSize(curW, curH);
+        window->setProjectionMatrixSize(curW, curH);
+    }
     setDrawModeOrtho();
     drawUtils->drawBackground2D(textures["background"]);
     drawUtils->drawLabel(labels[3], 6.0f * kInGameTextScale);
