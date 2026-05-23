@@ -134,6 +134,15 @@ private:
         EnterTap enterTap;
         MenuEnterTap menuEnterTap;
         float pinchLastDist = 0.0f;
+        // Latches when the user dismisses the IME (system back gesture, IME's down arrow). On
+        // modern Android the back gesture hides the IME without sending KEYCODE_BACK through
+        // onKeyPreIme, so SDL_IsTextInputActive stays TRUE — only SDL_IsScreenKeyboardShown
+        // (which queries imm.isAcceptingText) reflects the real visibility. The latch blocks
+        // syncTextInputState and requestScreenKeyboardOnTap from re-raising the keyboard until
+        // the user leaves the input submenu or explicitly taps mid-screen to ask for it back.
+        bool keyboardDismissedByUser = false;
+        bool prevTextInputActive = false;
+        bool prevKeyboardShown = false;
 
         void setTextInputRect();
         void requestScreenKeyboardOnTap();

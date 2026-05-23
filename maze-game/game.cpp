@@ -621,21 +621,20 @@ void Game::Android::requestScreenKeyboardOnTap() {
             && (game->subMenu == SubMenu::ENTER_PLAYER_NAME || game->subMenu == SubMenu::ENTER_SERVER_ADDRESS))
         || (game->screen == Screen::GAME && game->chatMode);
     if (!needOnScreenKeyboard) return;
-    // Only show IME on tap when it is not already up (avoid stop/start on every touch).
-    if (SDL_HasScreenKeyboardSupport() == SDL_TRUE) {
-        if (SDL_IsScreenKeyboardShown(game->window->getWindow()) == SDL_TRUE) {
-            return;
-        }
-    } else {
-        if (SDL_IsTextInputActive()) {
-            return;
-        }
-    }
+    if (keyboardDismissedByUser) return;
+    const bool shown = (SDL_HasScreenKeyboardSupport() == SDL_TRUE)
+        && (SDL_IsScreenKeyboardShown(game->window->getWindow()) == SDL_TRUE);
+    if (shown) return;
+    // Force a re-show: gesture-nav back can hide the IME without flipping SDL_IsTextInputActive,
+    // so a plain SDL_StartTextInput would be a no-op. Stop first to clear any stale state.
     if (SDL_IsTextInputActive()) {
         SDL_StopTextInput();
     }
     SDL_StartTextInput();
     setTextInputRect();
+    prevTextInputActive = true;
+    prevKeyboardShown = (SDL_HasScreenKeyboardSupport() == SDL_TRUE)
+        && (SDL_IsScreenKeyboardShown(game->window->getWindow()) == SDL_TRUE);
     SDL_RaiseWindow(game->window->getWindow());
 }
 
@@ -646,14 +645,35 @@ void Game::Android::syncTextInputState() {
             && (game->subMenu == SubMenu::ENTER_PLAYER_NAME || game->subMenu == SubMenu::ENTER_SERVER_ADDRESS))
         || (game->screen == Screen::GAME && game->chatMode);
     if (needOnScreenKeyboard) {
-        if (!SDL_IsTextInputActive()) {
-            SDL_StartTextInput();
+        const bool active = SDL_IsTextInputActive();
+        const bool shown = (SDL_HasScreenKeyboardSupport() == SDL_TRUE)
+            && (SDL_IsScreenKeyboardShown(game->window->getWindow()) == SDL_TRUE);
+        // Detect dismissal two ways: (a) SDL flipped IsTextInputActive off — happens when the
+        // IME path through onKeyPreIme fires SDL_StopTextInput; (b) the IME visibility flipped
+        // off while SDL still thinks text input is active — happens with Android's gesture-nav
+        // back, which hides the IME without delivering KEYCODE_BACK to the app.
+        if ((prevTextInputActive && !active) || (prevKeyboardShown && !shown)) {
+            keyboardDismissedByUser = true;
         }
-        setTextInputRect();
+        if (!active && !keyboardDismissedByUser) {
+            SDL_StartTextInput();
+            setTextInputRect();
+            prevTextInputActive = SDL_IsTextInputActive();
+        } else if (active) {
+            setTextInputRect();
+            prevTextInputActive = true;
+        } else {
+            prevTextInputActive = false;
+        }
+        prevKeyboardShown = (SDL_HasScreenKeyboardSupport() == SDL_TRUE)
+            && (SDL_IsScreenKeyboardShown(game->window->getWindow()) == SDL_TRUE);
     } else {
         if (SDL_IsTextInputActive()) {
             SDL_StopTextInput();
         }
+        keyboardDismissedByUser = false;
+        prevTextInputActive = false;
+        prevKeyboardShown = false;
     }
 }
 
@@ -1020,14 +1040,6 @@ int Game::handleMenuEvents() {
         case SDL_QUIT:
             exitGame();
             break;
-#if defined(__ANDROID__)
-        case SDL_MOUSEBUTTONDOWN:
-            if (event.button.button == SDL_BUTTON_LEFT
-                && (subMenu == SubMenu::ENTER_PLAYER_NAME || subMenu == SubMenu::ENTER_SERVER_ADDRESS)) {
-                android.requestScreenKeyboardOnTap();
-            }
-            break;
-#endif
         case SDL_MOUSEBUTTONUP:
             if (event.button.button == SDL_BUTTON_LEFT) {
 #if defined(__ANDROID__)
@@ -1080,7 +1092,6 @@ int Game::handleMenuEvents() {
         }
 #if defined(__ANDROID__)
         case SDL_FINGERDOWN:
-            android.requestScreenKeyboardOnTap();
             {
                 const float w = (float)window->getWidth();
                 const float h = (float)window->getHeight();
@@ -1088,7 +1099,9 @@ int Game::handleMenuEvents() {
                 const float py = event.tfinger.y * h;
                 // Android reserves a strip on the left and right edges for the system back gesture.
                 // A swipe that starts there often arrives as a short FINGERDOWN/FINGERUP pair and
-                // would otherwise be misread as a blank-area tap-to-confirm (ENTER).
+                // would otherwise be misread as a blank-area tap-to-confirm (ENTER) or a tap-to-
+                // raise-keyboard. Skipping the tap tracker for edge touches keeps the back gesture
+                // from re-showing the IME the user just dismissed.
                 const float edgeInset = fmaxf(48.0f, w * 0.05f);
                 if (px <= edgeInset || px >= w - edgeInset) {
                     android.menuEnterTap.active = false;
@@ -1112,11 +1125,22 @@ int Game::handleMenuEvents() {
                     const bool liftedAtEdge = (uxp <= edgeInset || uxp >= w - edgeInset);
                     const float d = std::hypot(uxp - android.menuEnterTap.x, uyp - android.menuEnterTap.y);
                     if (!liftedAtEdge && d <= 32.0f && (float)(SDL_GetTicks() - android.menuEnterTap.startTicks) <= 450.0f) {
-                        const int hit = menuApplyPointerUpAt(uxp, uyp);
-                        if (hit > 0) {
-                            clickedButtonIndex = hit;
-                        } else if (hit == 0) {
-                            menuBlankTapEnter = true;
+                        const bool inInputSubMenu = (subMenu == SubMenu::ENTER_PLAYER_NAME || subMenu == SubMenu::ENTER_SERVER_ADDRESS);
+                        const bool imeShown = (SDL_HasScreenKeyboardSupport() == SDL_TRUE)
+                            && (SDL_IsScreenKeyboardShown(window->getWindow()) == SDL_TRUE);
+                        if (inInputSubMenu && !imeShown) {
+                            // Confirmed tap in an input submenu while the IME is dismissed — the
+                            // user wants to type again. Clear the dismissal latch and bring it up
+                            // instead of advancing the menu via blank-tap-enter.
+                            android.keyboardDismissedByUser = false;
+                            android.requestScreenKeyboardOnTap();
+                        } else {
+                            const int hit = menuApplyPointerUpAt(uxp, uyp);
+                            if (hit > 0) {
+                                clickedButtonIndex = hit;
+                            } else if (hit == 0) {
+                                menuBlankTapEnter = true;
+                            }
                         }
                     }
                 }
@@ -1850,6 +1874,8 @@ void Game::Android::openChatFromPointer() {
         SDL_PumpEvents();
         SDL_FlushEvent(SDL_TEXTINPUT);
     }
+    // Explicit user request — defeat any earlier dismissal latch.
+    keyboardDismissedByUser = false;
     requestScreenKeyboardOnTap();
 }
 
