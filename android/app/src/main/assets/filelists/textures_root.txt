@@ -1,0 +1,16 @@
+textures/Finish.png
+textures/Item1.png
+textures/Item2.png
+textures/Item3.png
+textures/Item4.png
+textures/Item5.png
+textures/Item6.png
+textures/NPC.png
+textures/Start.png
+textures/arrow_down.png
+textures/arrow_left.png
+textures/arrow_right.png
+textures/arrow_up.png
+textures/bg.png
+textures/cars.png
+textures/select.png

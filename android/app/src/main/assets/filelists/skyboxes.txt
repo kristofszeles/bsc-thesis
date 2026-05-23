@@ -1,0 +1,8 @@
+textures/skyboxes/skybox1.png
+textures/skyboxes/skybox2.png
+textures/skyboxes/skybox3.png
+textures/skyboxes/skybox4.png
+textures/skyboxes/skybox5.png
+textures/skyboxes/skybox6.png
+textures/skyboxes/skybox7.png
+textures/skyboxes/skybox8.png
