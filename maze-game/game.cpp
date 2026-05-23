@@ -1583,11 +1583,19 @@ void Game::drawHUD() {
         android.dpadGetLayout(dpx, dpy, dps, dpcell);
         (void)dpx;
         (void)dpcell;
-        const float chatBottom = dpy - 12.0f * g;
-        const float chatPanelTop = fmaxf(100.0f, chatBottom - 220.0f * g);
         const float gapAboveDpad = 12.0f * g;
         const float inputLineH = 40.0f * g;
-        const float yInput = dpy - gapAboveDpad - inputLineH;
+        float yInput = dpy - gapAboveDpad - inputLineH;
+        if (chatMode) {
+            // The Android IME covers the lower portion of the screen, where the input line
+            // normally sits (just above the d-pad). Anchor it near the top third — above the
+            // typical IME band — so the user can see what they are typing the whole time chat
+            // is open, without the box jumping around as the IME shows/hides. The chat message
+            // stack is repositioned with it (it draws upward from yInput).
+            const float yInputAboveIme = (float)window->getHeight() * 0.35f - inputLineH;
+            yInput = fminf(yInput, yInputAboveIme);
+        }
+        const float chatPanelTop = fmaxf(100.0f, yInput - 220.0f * g);
         y = yInput - 10.0f * g;
         for (int i = client->getChatMessages().size(); i > 0 && i > (int)client->getChatMessages().size() - 6; --i) {
             unsigned int expiration = client->getChatMessages().at(i - 1).second;
