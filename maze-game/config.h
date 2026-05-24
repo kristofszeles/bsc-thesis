@@ -27,6 +27,9 @@ public:
         config["game"]["singlePlayer"]["score"] = 0;
         config["game"]["singlePlayer"]["highScore"] = 0;
         config["game"]["singlePlayer"]["health"] = 0;
+        config["game"]["singlePlayer"]["cameraMode"] = 0;
+        config["game"]["singlePlayer"]["cameraYaw"] = 0.0f;
+        config["game"]["singlePlayer"]["cameraPitch"] = 0.0f;
         config["window"]["defaultWidth"] = 1280;
         config["window"]["defaultHeight"] = 720;
         config["window"]["maximized"] = false;

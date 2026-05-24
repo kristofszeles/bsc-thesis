@@ -424,6 +424,14 @@ void Game::run() {
                         loadMap(lastMapPath());
                         setPlayerScore((int)config->getData()["game"]["singlePlayer"]["score"]);
                         map->getPlayer()->setHealth((int)config->getData()["game"]["singlePlayer"]["health"]);
+                        // .value() defaults for configs written before these keys existed. Yaw/pitch
+                        // must be applied after loadMap, which otherwise overwrites them from the
+                        // player's stored angle (Map::loadEntities resets pitch to 0).
+                        const auto& sp = config->getData()["game"]["singlePlayer"];
+                        const int savedMode = sp.value("cameraMode", 0);
+                        if (savedMode == 1) camera->setMode(1);
+                        camera->setYaw(sp.value("cameraYaw", 0.0f));
+                        camera->setPitch(sp.value("cameraPitch", 0.0f));
                         setDrawModePerspective();
                     }
                 } else if (event == 3) {  // multiplayer
@@ -582,6 +590,12 @@ void Game::run() {
                 if (gameMode == GameMode::SINGLE_PLAYER) {
                     config->getData()["game"]["singlePlayer"]["score"] = playerScore;
                     config->getData()["game"]["singlePlayer"]["health"] = map->getPlayer()->getHealth();
+                    // Only FPS (0) and TPS (1) are valid in-game view modes; mode 2 is the menu's
+                    // choose-vehicle preview and would be nonsense to restore.
+                    const int mode = camera->getMode();
+                    config->getData()["game"]["singlePlayer"]["cameraMode"] = (mode == 1) ? 1 : 0;
+                    config->getData()["game"]["singlePlayer"]["cameraYaw"] = camera->getYaw();
+                    config->getData()["game"]["singlePlayer"]["cameraPitch"] = camera->getPitch();
                     map->saveState(lastMapPath());
                 }
                 deleteMap();
