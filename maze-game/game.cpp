@@ -54,6 +54,8 @@ static bool keyIsBackOrEscape(const SDL_Keysym& keysym) {
 #include "shaders.h"
 
 #if defined(__ANDROID__)
+#include "android_picker.h"
+
 static void maze_android_load_asset_lines(const std::string& path, std::vector<std::string>& out) {
     // APK assets are not ordinary filesystem paths; std::ifstream fails. SDL_LoadFile uses the same
     // asset resolution as IMG_Load and the rest of the Android port.
@@ -496,6 +498,22 @@ void Game::run() {
                 SDL_PumpEvents();
                 SDL_FlushEvent(SDL_KEYDOWN);
             } else if (subMenu == SubMenu::CHOOSE_DIFFICULTY) {
+#if defined(__ANDROID__)
+                {
+                    std::string picked;
+                    if (maze_android::consumePickedMap(picked)) {
+                        screen = Screen::GAME;
+                        gameMode = GameMode::SINGLE_PLAYER;
+                        deleteMenu();
+                        camera->reset();
+                        std::stringstream ss(picked);
+                        loadMap(ss);
+                        setDrawModePerspective();
+                        // Skip the difficulty/ESCAPE dispatch below: we have already left the menu.
+                        event = 0;
+                    }
+                }
+#endif
                 std::string difficulty;
                 switch (event) {
                 case MenuEvent::MENU_PRESS_ESCAPE:
@@ -1262,7 +1280,10 @@ void Game::handleCollisions() {
 
 void Game::openMap() {
 #if defined(__ANDROID__)
-    (void)0;
+    // Async on Android: launch the SAF picker and return. The menu loop polls
+    // maze_android::consumePickedMap() each iteration; once the user picks a file the bytes
+    // arrive via the JNI callback and are loaded then.
+    maze_android::launchOpenMapPicker();
 #else
     NFD::Guard nfdGuard;
     NFD::UniquePath fileName;

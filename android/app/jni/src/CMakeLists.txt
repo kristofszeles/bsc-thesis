@@ -5,6 +5,7 @@ set(MAZE_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../..")
 set(MAZE_DIR "${MAZE_ROOT}/maze-game")
 
 set(MAZE_SOURCES
+    ${MAZE_DIR}/android_picker.cpp
     ${MAZE_DIR}/base64.cpp
     ${MAZE_DIR}/client.cpp
     ${MAZE_DIR}/drawutils.cpp

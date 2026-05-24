@@ -2,6 +2,9 @@
 #include <memory>
 
 #include "editor.h"
+#if defined(__ANDROID__)
+#include "android_picker.h"
+#endif
 
 #if defined(__ANDROID__)
 #include <SDL_hints.h>
@@ -53,6 +56,16 @@ void Editor::run() {
 		drawMap();
 		drawGui();
 		int event = handleEvents();
+#if defined(__ANDROID__)
+		{
+			std::string picked;
+			if (maze_android::consumePickedMap(picked)) {
+				std::stringstream ss(picked);
+				loadMapWithHeader(ss);
+				updateCamera();
+			}
+		}
+#endif
 		switch (event) {
 		case 1:
 			newMap();
@@ -150,6 +163,17 @@ void Editor::newMap() {
 
 void Editor::saveMap() {
 #if defined(__ANDROID__)
+	// Build the same file content saveMap(fileName) would write, then hand it to MainActivity.java
+	// which prompts the user for a destination URI via SAF and writes the bytes there.
+	std::stringstream ss;
+	ss << skyboxTexture << "\n";
+	ss << tileTextures.at(selectedTileTexture) << "\n";
+	for (auto& block : blocks) {
+		if (block) {
+			ss << block->type << " " << block->x * 3 << " " << 0 << " " << block->y * 3 << " " << block->angle << "\n";
+		}
+	}
+	maze_android::launchSaveMapPicker(ss.str());
 	return;
 #else
 	NFD::Guard nfdGuard;
@@ -181,6 +205,9 @@ void Editor::saveMap(const std::string& fileName) {
 
 void Editor::openMap() {
 #if defined(__ANDROID__)
+	// Async on Android: launch the SAF picker and return. The editor's main loop polls
+	// maze_android::consumePickedMap() each iteration.
+	maze_android::launchOpenMapPicker();
 	return;
 #else
 	NFD::Guard nfdGuard;
@@ -220,6 +247,22 @@ void Editor::loadMap(const std::string& fileName) {
 void Editor::loadMap(std::stringstream& data) {
 	if (!blocks.empty()) newMap();
 	selectedTileTexture = rand() % tileTextures.size();
+	std::string type;
+	float x, y, z, angle;
+	while (data >> type >> x >> y >> z >> angle) {
+		x /= 3;
+		z /= 3;
+		addBlock(new Block(type, x, z, 0, angle));
+		if (x + 1 > mapWidth) mapWidth = (int)x + 1;
+		if (z + 1 > mapHeight) mapHeight = (int)z + 1;
+	}
+}
+
+void Editor::loadMapWithHeader(std::stringstream& data) {
+	if (!blocks.empty()) newMap();
+	data >> skyboxTexture;
+	data >> tileTexture;
+	updateSelectedTileTexture();
 	std::string type;
 	float x, y, z, angle;
 	while (data >> type >> x >> y >> z >> angle) {

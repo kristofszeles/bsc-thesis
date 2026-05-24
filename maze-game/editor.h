@@ -83,6 +83,9 @@ public:
 	void saveMap(const std::string& fileName);
 	void loadMap(const std::string& fileName);
 	void loadMap(std::stringstream& data);
+	// Same as loadMap(stringstream) but reads the skybox+tile header lines first; used for SAF
+	// open results on Android where the picked file is delivered as bytes, not a path.
+	void loadMapWithHeader(std::stringstream& data);
 	void addBlock(Block* block);
 	void moveBlock(Block* block, float x, float y);
 	void setSkyboxTexture(const std::string& fileName) { this->skyboxTexture = fileName; }

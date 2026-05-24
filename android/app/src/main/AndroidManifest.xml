@@ -14,7 +14,7 @@
         android:hardwareAccelerated="true"
         android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
         <activity
-            android:name="org.libsdl.app.SDLActivity"
+            android:name="com.bscthesis.maze_game.MainActivity"
             android:configChanges="layoutDirection|locale|orientation|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
             android:exported="true"
             android:screenOrientation="fullUser">
