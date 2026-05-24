@@ -20,3 +20,5 @@ android/build/
 android/app/build/
 android/local.properties
 android/app/src/main/java/org/
+android/app/jni/build/
+android/app/.cxx/
