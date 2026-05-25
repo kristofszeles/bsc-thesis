@@ -1624,7 +1624,10 @@ void Game::drawHUD() {
         const float inputLineH = 40.0f * g;
         const float yInput = dpy - gapAboveDpad - inputLineH;
         const float chatPanelTop = fmaxf(100.0f, yInput - 220.0f * g);
-        y = yInput - 10.0f * g;
+        // 32g of breathing room above the input — matches the desktop layout where the input
+        // sits at `h - 32g` and the first message at `h - 64g`. The previous 10g gap let the
+        // message bottom collide with the input top because each line of glyphs is ~16g tall.
+        y = yInput - 32.0f * g;
         for (int i = client->getChatMessages().size(); i > 0 && i > (int)client->getChatMessages().size() - 6; --i) {
             unsigned int expiration = client->getChatMessages().at(i - 1).second;
             if (expiration < SDL_GetTicks()) continue;
