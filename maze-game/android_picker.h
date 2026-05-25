@@ -15,6 +15,9 @@ namespace maze_android {
     void launchOpenMapPicker();
     void launchSaveMapPicker(const std::string& data);
     bool consumePickedMap(std::string& out);
+    // Current soft-keyboard height in pixels, or 0 when hidden. Backed by a listener installed
+    // in MainActivity.onCreate; safe to call from the SDL thread on every frame.
+    int getImeHeightPx();
 }
 
 #endif

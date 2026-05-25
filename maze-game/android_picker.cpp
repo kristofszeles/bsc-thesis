@@ -97,6 +97,18 @@ bool consumePickedMap(std::string& out) {
     return true;
 }
 
+int getImeHeightPx() {
+    int result = 0;
+    withActivityClass([&result](JNIEnv* env, jobject /*activity*/, jclass cls) {
+        jmethodID mid = env->GetStaticMethodID(cls, "getImeHeightPx", "()I");
+        if (!mid) {
+            return;
+        }
+        result = (int)env->CallStaticIntMethod(cls, mid);
+    });
+    return result < 0 ? 0 : result;
+}
+
 }
 
 #endif
