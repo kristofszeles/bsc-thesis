@@ -483,17 +483,24 @@ Texture* renderText(const std::string& text, SDL_Surface** fonts) {
             }
             const int penX = dst.x;
             if (id == 6 || id == 7) {
-                src = {id * 9 + 1, 1, 6, 7};
-                dst = {penX, 1, 6, 7};
+                // Match specialsTextureRectForId(): chevron artwork is 6x8 at the top-left of
+                // the 9px cell, not the 6x7-at-(1,1) the previous rect was reading (which
+                // clipped the top row and left column — the visible "truncation" on `>`).
+                src = {id * 9, 0, 6, 8};
+                dst = {penX, 0, 6, 8};
                 SDL_BlitSurface(fonts[3], &src, surface, &dst);
                 lineRightMax = (std::max)(lineRightMax, penX + 6);
-                dst.x = penX + 6;
+                // Restore the standard 9x9 blit rect — digit/letter branches only update src.x
+                // and dst.x, so leaving src/dst at 6x8 here truncates every following glyph.
+                src = {0, 0, 9, 9};
+                dst = {penX + 6, 0, 1000, 9};
             } else if (id == 8) {
-                src = {id * 9 + 1, 1, 7, 6};
-                dst = {penX, 1, 7, 6};
+                src = {id * 9, 0, 7, 7};
+                dst = {penX, 0, 7, 7};
                 SDL_BlitSurface(fonts[3], &src, surface, &dst);
                 lineRightMax = (std::max)(lineRightMax, penX + 7);
-                dst.x = penX + 6;
+                src = {0, 0, 9, 9};
+                dst = {penX + 6, 0, 1000, 9};
             } else {
                 src = {id * 9, 0, 9, 9};
                 dst = {penX, 0, 9, 9};
