@@ -634,7 +634,9 @@ void Game::Android::setTextInputRect() {
         dpadGetLayout(dpx, dpy, dps, dpc);
         (void)dpx;
         (void)dpc;
-        // IME focus: region from above the d-pad (chat sits there on Android)
+        // IME focus: region from above the d-pad (chat sits there on Android). With
+        // adjustResize, the SDL surface — and therefore the d-pad — already sits above the
+        // keyboard, so this anchor lines up with the visible input line.
         const int y0 = (int)(dpy - 12.0f - 52.0f);
         r.x = 0;
         r.y = (y0 > 0) ? y0 : (int)(h * 0.45f);
@@ -1620,16 +1622,7 @@ void Game::drawHUD() {
         (void)dpcell;
         const float gapAboveDpad = 12.0f * g;
         const float inputLineH = 40.0f * g;
-        float yInput = dpy - gapAboveDpad - inputLineH;
-        if (chatMode) {
-            // The Android IME covers the lower portion of the screen, where the input line
-            // normally sits (just above the d-pad). Anchor it near the top third — above the
-            // typical IME band — so the user can see what they are typing the whole time chat
-            // is open, without the box jumping around as the IME shows/hides. The chat message
-            // stack is repositioned with it (it draws upward from yInput).
-            const float yInputAboveIme = (float)window->getHeight() * 0.35f - inputLineH;
-            yInput = fminf(yInput, yInputAboveIme);
-        }
+        const float yInput = dpy - gapAboveDpad - inputLineH;
         const float chatPanelTop = fmaxf(100.0f, yInput - 220.0f * g);
         y = yInput - 10.0f * g;
         for (int i = client->getChatMessages().size(); i > 0 && i > (int)client->getChatMessages().size() - 6; --i) {
@@ -1833,7 +1826,10 @@ void Game::Android::viewToggleGetLayout(float& outX, float& outY, float& outS) c
     if (outX < m) {
         outX = m;
     }
-    outY = h - m - s;
+    // Same IME-aware bottom anchor as dpadGetLayout — the chat button derives from this, so it
+    // moves above the keyboard for free.
+    const float imeH = (float)maze_android::getImeHeightPx();
+    outY = h - imeH - m - s;
 }
 
 bool Game::Android::viewToggleContainsPoint(float px, float py) const {
@@ -1956,7 +1952,11 @@ void Game::Android::dpadGetLayout(float& outX, float& outY, float& outSize, floa
     if (s < 140.0f) s = 140.0f;
     if (s > 300.0f) s = 300.0f;
     outX = m;
-    outY = h - m - s;
+    // Treat the IME top as the effective bottom of the screen and apply the same `m` margin
+    // used against the real screen edge — no special-casing. Every HUD element anchored to the
+    // d-pad (chat input, message stack) follows along. The 3D viewport stays full-size.
+    const float imeH = (float)maze_android::getImeHeightPx();
+    outY = h - imeH - m - s;
     outSize = s;
     outCell = s / 3.0f;
 }
