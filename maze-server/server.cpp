@@ -36,7 +36,7 @@ std::string primaryLocalIPv4String() {
     sockaddr_in remote{};
     remote.sin_family = AF_INET;
     remote.sin_port = htons(53);
-    remote.sin_addr.s_addr = inet_addr("8.8.8.8");
+    inet_pton(AF_INET, "8.8.8.8", &remote.sin_addr);
 
     std::string result;
     if (connect(s, reinterpret_cast<sockaddr*>(&remote), sizeof(remote)) == 0) {
