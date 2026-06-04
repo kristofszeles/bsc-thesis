@@ -197,24 +197,24 @@ jobs:
           git clone --depth 1 --branch release-2.2.x https://github.com/libsdl-org/SDL_net.git "$JNI/SDL_net"
           cp -a "$JNI/SDL/android-project/app/src/main/java/org" "$JAVA_ORG/"
 
-      - name: Assemble release APK
+      - name: Assemble debug APK
         working-directory: android
         run: |
           set -euo pipefail
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease
+          ./gradlew --no-daemon assembleDebug
 
       - name: Stage APK with release-friendly name
         run: |
           set -euo pipefail
-          cp android/app/build/outputs/apk/release/app-release-unsigned.apk \
-            "bsc-thesis-${{ env.VERSION_LABEL }}-android-release.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+            "bsc-thesis-${{ env.VERSION_LABEL }}-android-debug.apk"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: dist-android-${{ env.VERSION_LABEL }}
-          path: bsc-thesis-${{ env.VERSION_LABEL }}-android-release.apk
+          path: bsc-thesis-${{ env.VERSION_LABEL }}-android-debug.apk
           if-no-files-found: error
 
   release:
