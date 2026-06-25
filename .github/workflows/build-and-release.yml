@@ -62,6 +62,19 @@ jobs:
         if: matrix.package == 'linux'
         run: sh scripts/ci/linux/build-deb.sh "${{ env.VERSION_LABEL }}"
 
+      # Debug build reuses the maze-*/maze-* binary paths, so it must run after the
+      # release .deb has been built from the optimized binaries above.
+      - name: Build debug binaries (Linux)
+        if: matrix.package == 'linux'
+        run: |
+          set -euo pipefail
+          (cd maze-server && sh build-linux-ci-debug.sh)
+          (cd maze-game && sh build-linux-ci-debug.sh)
+
+      - name: Build debug Debian packages (Linux)
+        if: matrix.package == 'linux'
+        run: sh scripts/ci/linux/build-deb-debug.sh "${{ env.VERSION_LABEL }}"
+
       - name: Setup MSBuild (Windows)
         if: matrix.package == 'windows'
         uses: microsoft/setup-msbuild@v2
@@ -143,6 +156,8 @@ jobs:
             bsc-thesis-${{ env.VERSION_LABEL }}-linux-x86_64.tar.gz
             bsc-thesis-maze-game_*.deb
             bsc-thesis-maze-server_*.deb
+            bsc-thesis-maze-game-debug_*.deb
+            bsc-thesis-maze-server-debug_*.deb
           if-no-files-found: error
 
       - name: Upload artifact (Windows)
