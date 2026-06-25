@@ -53,11 +53,21 @@ void Client::connectToServer(const char* host, Uint16 port) {
 }
 
 void Client::disconnectFromServer() {
+    // Only signal the worker thread to stop here. The socket must NOT be closed while
+    // the worker may still be inside receiveMessages()/SDLNet_CheckSockets/SDLNet_TCP_Recv,
+    // otherwise it operates on a freed socket and corrupts the heap. The socket is closed
+    // by closeConnection() once the worker thread has been joined.
     if (connected) {
         if (DEBUG_MODE) std::cout << "Disconnecting from the server..." << std::endl;
         connected = false;
+    }
+}
+
+void Client::closeConnection() {
+    if (socket) {
         SDLNet_TCP_DelSocket(socketSet, socket);
         SDLNet_TCP_Close(socket);
+        socket = nullptr;
     }
 }
 

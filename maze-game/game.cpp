@@ -166,6 +166,7 @@ Game::~Game() {
     delete config;
     client->disconnectFromServer();
     client->join();
+    client->closeConnection();
     delete client;
 #if defined(__ANDROID__)
     if (SDL_IsTextInputActive()) {
@@ -498,6 +499,7 @@ void Game::run() {
                         client->start();
                     } else {
                         client->disconnectFromServer();
+                        client->closeConnection();
                         subMenu = SubMenu::ENTER_SERVER_ADDRESS;
                     }
                 } else {
@@ -587,6 +589,7 @@ void Game::run() {
                 setDrawModeOrtho();
                 client->disconnectFromServer();
                 client->join();
+                client->closeConnection();
                 if (gameMode == GameMode::SINGLE_PLAYER) {
                     config->getData()["game"]["singlePlayer"]["score"] = playerScore;
                     config->getData()["game"]["singlePlayer"]["health"] = map->getPlayer()->getHealth();

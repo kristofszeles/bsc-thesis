@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SDL_net.h>
+#include <atomic>
 #include <string>
 #include <sstream>
 #include <queue>
@@ -18,7 +19,8 @@ class Map;
 
 class Client : public CppThread {
 private:
-    bool connected, receivedMapLoaded;
+    std::atomic<bool> connected;
+    bool receivedMapLoaded;
     Map* map;
     TCPsocket socket;
     SDLNet_SocketSet socketSet;
@@ -32,11 +34,13 @@ private:
 public:
     Client();
     virtual ~Client() {
+        closeConnection();
         SDLNet_FreeSocketSet(socketSet);
     }
     void run() override;
     void connectToServer(const char* host, Uint16 port);
     void disconnectFromServer();
+    void closeConnection();
     void sendMessage(const json& message);
     void receiveMessages(int timeout = 0);
     void clearQueue();
