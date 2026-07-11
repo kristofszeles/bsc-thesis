@@ -120,8 +120,10 @@ void Server::handleMessageQueue() {
         if (DEBUG_MODE) std::cout << "Sending " << message << std::endl;
         for (auto& serverThread : serverThreads) {
             if (!serverThread->isStopped() && serverThread->isInitialized()) {
-                if (SDLNet_TCP_Send(serverThread->getSocket(), message.c_str(), length) < length) {
-                    if (DEBUG_MODE) std::cout << "SDLNet_TCP_Send: " << SDLNet_GetError() << std::endl;
+                // Route through the thread's transport: WebSocket clients need
+                // the payload framed, and sendBytes serializes concurrent writes.
+                if (!serverThread->sendBytes(message.c_str(), length)) {
+                    if (DEBUG_MODE) std::cout << "sendBytes: " << SDLNet_GetError() << std::endl;
                 }
             }
         }

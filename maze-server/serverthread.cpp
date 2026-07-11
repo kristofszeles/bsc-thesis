@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cstring>
 #include <iostream>
 
 #include "serverthread.h"
@@ -6,6 +8,41 @@
 ServerThread::ServerThread(Server* server, TCPsocket socket, const std::string& id) : server(server), socket(socket), id(id) {
     this->stop = false;
     this->initialized = false;
+    this->transportDetected = false;
+    this->webSocketClient = false;
+}
+
+int ServerThread::receiveBytes(char* out, int maxLength) {
+    if (!transportDetected) {
+        std::string initialData;
+        const int result = webSocket.detect(socket, initialData);
+        if (result < 0) return -1;
+        transportDetected = true;
+        webSocketClient = (result == 1);
+        if (!webSocketClient) pendingRaw = initialData;
+    }
+    if (webSocketClient) {
+        return webSocket.recvPayload(socket, out, maxLength);
+    }
+    // Hand out bytes consumed during transport detection first.
+    if (!pendingRaw.empty()) {
+        const int count = std::min((int)pendingRaw.size(), maxLength);
+        std::memcpy(out, pendingRaw.data(), (size_t)count);
+        pendingRaw.erase(0, (size_t)count);
+        return count;
+    }
+    return SDLNet_TCP_Recv(socket, out, maxLength);
+}
+
+bool ServerThread::sendBytes(const char* data, int length) {
+    // Broadcasts (Server::handleMessageQueue) and this thread's replies can
+    // write concurrently; serialize them so WebSocket frames (and TCP message
+    // boundaries) never interleave.
+    std::lock_guard<std::mutex> lock(sendMutex);
+    if (webSocketClient) {
+        return webSocket.sendPayload(socket, data, length);
+    }
+    return SDLNet_TCP_Send(socket, data, length) >= length;
 }
 
 void ServerThread::run() {
@@ -82,7 +119,7 @@ void ServerThread::receiveMessages() {
     std::string messages;
     bool stop = false;
     do {
-        length = SDLNet_TCP_Recv(socket, message, MESSAGE_BUFFER_SIZE);
+        length = receiveBytes(message, MESSAGE_BUFFER_SIZE);
         for (int i = 0; i < length; ++i) {
             messages += message[i];
             if (message[i] == ';') {
@@ -134,8 +171,8 @@ void ServerThread::sendMessage(const json& message) {
     std::string data = message.dump() + ';';
     int length = data.size();
     if (length) {
-        if (SDLNet_TCP_Send(socket, data.c_str(), length) < length) {
-            if (DEBUG_MODE) std::cout << "SDLNet_TCP_Send: " << SDLNet_GetError() << std::endl;
+        if (!sendBytes(data.c_str(), length)) {
+            if (DEBUG_MODE) std::cout << "sendBytes: " << SDLNet_GetError() << std::endl;
         }
     }
     if (DEBUG_MODE) std::cout << "Sent message: " << data << std::endl;
