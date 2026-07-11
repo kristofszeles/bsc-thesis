@@ -24,8 +24,9 @@ public class MainActivity extends SDLActivity {
     private static volatile MainActivity instance;
     // Bytes captured by saveMapPicker() and consumed in onActivityResult.
     private static volatile byte[] pendingSaveData;
-    // Last observed soft-keyboard height in pixels (0 when the IME is hidden). Read from the
-    // SDL thread via getImeHeightPx() — using `volatile` for a plain word write is sufficient.
+    // Last observed overlap of the soft keyboard with the game's content view, in pixels
+    // (0 when the IME is hidden). Read from the SDL thread via getImeHeightPx() — using
+    // `volatile` for a plain word write is sufficient.
     private static volatile int imeHeightPx;
 
     @Override
@@ -35,8 +36,8 @@ public class MainActivity extends SDLActivity {
         installImeHeightTracker();
     }
 
-    // Returns the current IME (soft keyboard) height in pixels, or 0 if hidden. Called from
-    // native via JNI to position the chat panel/input above the keyboard.
+    // Returns how far the IME (soft keyboard) currently overlaps the game surface, in pixels,
+    // or 0 if hidden. Called from native via JNI to position the HUD above the keyboard.
     public static int getImeHeightPx() {
         return imeHeightPx;
     }
@@ -53,19 +54,37 @@ public class MainActivity extends SDLActivity {
         // RelativeLayout setup and survives any later content-view churn.
         final View decor = getWindow().getDecorView();
         decor.setOnApplyWindowInsetsListener((v, insets) -> {
-            int h = 0;
+            // Screen Y of the keyboard's top edge, or -1 while the IME is hidden.
+            int kbTopScreenY = -1;
             if (Build.VERSION.SDK_INT >= 30) {
-                h = insets.getInsets(WindowInsets.Type.ime()).bottom;
+                int ime = insets.getInsets(WindowInsets.Type.ime()).bottom;
+                if (ime > 0) {
+                    kbTopScreenY = v.getHeight() - ime;
+                }
             } else {
                 // Pre-30 fallback: getSystemWindowInsetBottom mixes IME + nav bar, so use
-                // the visible-display-frame difference and filter out values too small to
+                // the visible-display-frame bottom and filter out shrinkage too small to
                 // plausibly be a keyboard (i.e. a bare navigation bar).
                 Rect r = new Rect();
                 v.getWindowVisibleDisplayFrame(r);
                 int rootH = v.getRootView().getHeight();
-                int diff = rootH - (r.bottom - r.top);
-                if (diff > rootH * 0.15) {
-                    h = diff;
+                if (rootH - (r.bottom - r.top) > rootH * 0.15) {
+                    kbTopScreenY = r.bottom;
+                }
+            }
+            int h = 0;
+            if (kbTopScreenY >= 0) {
+                // The IME inset is measured from the decor (screen) bottom, but the SDL
+                // surface can end above it (nav bar). Report only the keyboard's overlap
+                // with the content view — the HUD subtracts this from the surface height,
+                // and the raw inset would lift it an extra nav-bar height above the IME.
+                View content = findViewById(android.R.id.content);
+                if (content != null && content.getHeight() > 0) {
+                    int[] loc = new int[2];
+                    content.getLocationOnScreen(loc);
+                    h = Math.max(0, loc[1] + content.getHeight() - kbTopScreenY);
+                } else {
+                    h = Math.max(0, v.getHeight() - kbTopScreenY);
                 }
             }
             imeHeightPx = h;
