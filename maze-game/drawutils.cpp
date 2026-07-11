@@ -300,9 +300,7 @@ void DrawUtils::drawText(const std::string& text, float x, float y, float scale)
     drawTexture2D(tex.get(), x, y, scale);
 }
 
-void DrawUtils::drawTextInput(const std::string& message, const std::string& input) {
-    const float scale = 8.0f;
-    const float off = 64.0f;
+void DrawUtils::drawTextInput(const std::string& message, const std::string& input, float scale, float off) {
     std::unique_ptr<Texture> texture1(renderText(message, fonts));
     std::unique_ptr<Texture> texture2(renderText(input + "_", fonts));
     drawTexture2D(texture1.get(), window->getWidth() / 2 - texture1->getWidth() * scale / 2, window->getHeight() / 2 - texture1->getHeight() * scale / 2 - off, scale);

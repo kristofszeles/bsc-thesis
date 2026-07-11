@@ -24,7 +24,7 @@ public:
 	void drawRectangle(SDL_Color color, float x, float y, float width, float height);
 	void drawBackground2D(Texture* texture);
 	void drawText(const std::string& text, float x, float y, float scale);
-	void drawTextInput(const std::string& message, const std::string& input);
+	void drawTextInput(const std::string& message, const std::string& input, float scale = 8.0f, float off = 64.0f);
 	void drawLabel(Texture* texture, float scale = 6.0f);
 	void drawLogo(Texture* texture);
 	void drawAuthor(Texture* texture);

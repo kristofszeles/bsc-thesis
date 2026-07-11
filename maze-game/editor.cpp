@@ -335,8 +335,8 @@ void Editor::drawGui() {
 	}
 	if (showInput) {
 		drawUtils->drawRectangle({ 96, 96, 96 }, drawUtils->getWindow()->getWidth() / 2 - 300.0f, drawUtils->getWindow()->getHeight() / 2 - 150.0f, 600.f, 300.0f);
-		if (mapWidth < 2) drawUtils->drawTextInput("Maze width: ", inputText);
-		else if (mapHeight < 2) drawUtils->drawTextInput("Maze height: ", inputText);
+		if (mapWidth < 2) drawUtils->drawTextInput("Maze width: ", inputText, 4.0f, 32.0f);
+		else if (mapHeight < 2) drawUtils->drawTextInput("Maze height: ", inputText, 4.0f, 32.0f);
 	}
 }
 
