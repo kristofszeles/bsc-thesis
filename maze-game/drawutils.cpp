@@ -415,14 +415,11 @@ Texture* renderText(const std::string& text, SDL_Surface** fonts) {
     SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, 854, 9, 32, SDL_PIXELFORMAT_RGBA32);
     SDL_Rect src = { 0, 0, 9, 9 };
     SDL_Rect dst = { 0, 0, 1000, 9 };
-    int lineRightMax = 0;  // for U/D 7px wide with 6px advance, extend result width
     for (unsigned int i = 0; i < text.size(); ++i) {
         if (text[i] >= '0' && text[i] <= '9') {
             int id = text[i] - '0';
             src.x = id * 9;
-            const int penX = dst.x;
             SDL_BlitSurface(fonts[0], &src, surface, &dst);
-            lineRightMax = (std::max)(lineRightMax, penX + 9);
             if (id == 1)
                 dst.x += 4;
             else
@@ -430,9 +427,7 @@ Texture* renderText(const std::string& text, SDL_Surface** fonts) {
         } else if (text[i] >= 'A' && text[i] <= 'Z') {
             int id = text[i] - 'A';
             src.x = id * 9;
-            const int penX = dst.x;
             SDL_BlitSurface(fonts[1], &src, surface, &dst);
-            lineRightMax = (std::max)(lineRightMax, penX + 9);
             if (id == 8)
                 dst.x += 6;
             else if (id == 12)
@@ -446,9 +441,7 @@ Texture* renderText(const std::string& text, SDL_Surface** fonts) {
         } else if (text[i] >= 'a' && text[i] <= 'z') {
             int id = text[i] - 'a';
             src.x = id * 9;
-            const int penX = dst.x;
             SDL_BlitSurface(fonts[2], &src, surface, &dst);
-            lineRightMax = (std::max)(lineRightMax, penX + 9);
             if (id == 2 || id == 5 || id == 9 || id == 19)
                 dst.x += 6;
             else if (id == 8 || id == 11)
@@ -458,73 +451,42 @@ Texture* renderText(const std::string& text, SDL_Surface** fonts) {
             else
                 dst.x += 7;
         } else if ((text[i] >= '!' && text[i] <= '/') || (text[i] >= ':' && text[i] <= '@') || (text[i] >= '[' && text[i] <= '`') || (text[i] >= '{' && text[i] <= '~')) {
-            // fonts[3] specials.png: ! ? . : - = > < ^ v  (ids 0..9). Down chevron is id 9 — use renderSpecialsGlyph(9). '_' uses slot 4 (hyphen art).
             int id = 0;
-            if (text[i] == '!') {
+            if (text[i] == '!')
                 id = 0;
-            } else if (text[i] == '?') {
+            else if (text[i] == '?')
                 id = 1;
-            } else if (text[i] == '.') {
+            else if (text[i] == '.')
                 id = 2;
-            } else if (text[i] == ':') {
+            else if (text[i] == ':')
                 id = 3;
-            } else if (text[i] == '-' || text[i] == '_') {
+            else if (text[i] == '_')
                 id = 4;
-            } else if (text[i] == '=') {
+            else if (text[i] == '-')
                 id = 5;
-            } else if (text[i] == '>') {
+            else if (text[i] == '>')
                 id = 6;
-            } else if (text[i] == '<') {
+            else if (text[i] == '<')
                 id = 7;
-            } else if (text[i] == '^') {
+            else if (text[i] == '^')
                 id = 8;
-            } else {
-                id = 0;
-            }
-            const int penX = dst.x;
-            if (id == 6 || id == 7) {
-                // Match specialsTextureRectForId(): chevron artwork is 6x8 at the top-left of
-                // the 9px cell, not the 6x7-at-(1,1) the previous rect was reading (which
-                // clipped the top row and left column — the visible "truncation" on `>`).
-                src = {id * 9, 0, 6, 8};
-                dst = {penX, 0, 6, 8};
-                SDL_BlitSurface(fonts[3], &src, surface, &dst);
-                lineRightMax = (std::max)(lineRightMax, penX + 6);
-                // Restore the standard 9x9 blit rect — digit/letter branches only update src.x
-                // and dst.x, so leaving src/dst at 6x8 here truncates every following glyph.
-                src = {0, 0, 9, 9};
-                dst = {penX + 6, 0, 1000, 9};
-            } else if (id == 8) {
-                src = {id * 9, 0, 7, 7};
-                dst = {penX, 0, 7, 7};
-                SDL_BlitSurface(fonts[3], &src, surface, &dst);
-                lineRightMax = (std::max)(lineRightMax, penX + 7);
-                src = {0, 0, 9, 9};
-                dst = {penX + 6, 0, 1000, 9};
-            } else {
-                src = {id * 9, 0, 9, 9};
-                dst = {penX, 0, 9, 9};
-                SDL_BlitSurface(fonts[3], &src, surface, &dst);
-                lineRightMax = (std::max)(lineRightMax, penX + 9);
-                if (id == 1) {
-                    dst.x = penX + 8;
-                } else if (id == 4) {
-                    dst.x = penX + 5;
-                } else if (id == 5) {
-                    dst.x = penX + 6;
-                } else {
-                    dst.x = penX + 4;
-                }
-            }
+            src.x = id * 9;
+            SDL_BlitSurface(fonts[3], &src, surface, &dst);
+            if (id == 1)
+                dst.x += 8;
+            else if (id == 4 || id == 8)
+                dst.x += 7;
+            else if (id == 5)
+                dst.x += 5;
+            else if (id == 6 || id == 7)
+                dst.x += 6;
+            else
+                dst.x += 4;
         } else {
             dst.x += 3;
         }
     }
-    if (lineRightMax > 0) {
-        dst.w = (std::max)(lineRightMax, dst.x);
-    } else {
-        dst.w = dst.x;
-    }
+    dst.w = dst.x;  // set width properly
     SDL_Surface* result = SDL_CreateRGBSurfaceWithFormat(0, dst.w, 9, 32, SDL_PIXELFORMAT_RGBA32);
     SDL_BlitSurface(surface, nullptr, result, nullptr);
     Texture* texture = createTextureFromSurface(result);
