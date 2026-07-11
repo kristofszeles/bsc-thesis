@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>3D Maze Game</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+    #canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+    #status {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      transform: translateY(-50%);
+      color: #9aa0b0;
+      font: 16px/1.6 monospace;
+      text-align: center;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+  <div id="status">Loading&hellip;</div>
+  <script>
+    var statusElement = document.getElementById('status');
+    var Module = {
+      canvas: (function() {
+        var canvas = document.getElementById('canvas');
+        canvas.addEventListener('webglcontextlost', function(e) {
+          alert('WebGL context lost. Please reload the page.');
+          e.preventDefault();
+        }, false);
+        return canvas;
+      })(),
+      setStatus: function(text) {
+        // main() never returns (the game loop suspends via Asyncify), so the
+        // runtime's final "Running..." status would stay on screen forever.
+        if (text === 'Running...') text = '';
+        statusElement.textContent = text;
+        statusElement.style.display = text ? 'block' : 'none';
+      },
+    };
+    window.onerror = function() {
+      Module.setStatus('An error occurred - see the browser console');
+    };
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

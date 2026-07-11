@@ -7,6 +7,10 @@
 
 #include "game.h"
 
+#if defined(__EMSCRIPTEN__)
+#include "web_support.h"
+#endif
+
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #include <limits.h>
@@ -44,6 +48,11 @@ int main(int argc, char* argv[]) {
 
 #ifdef __APPLE__
     maze_macos_chdir_to_bundle_resources_if_needed();
+#endif
+#if defined(__EMSCRIPTEN__)
+    // Load /persistent (config, last.map) from IndexedDB before Game reads it.
+    // Blocks via Asyncify; the whole game keeps its native blocking main loop.
+    maze_web::initPersistentFS();
 #endif
 
     {

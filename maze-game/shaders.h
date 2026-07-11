@@ -2,8 +2,10 @@
 
 #include <string>
 
+#include "gl_core.h"
+
 // macOS: SDL defaults to a legacy OpenGL 2.1 context; only GLSL 1.20 is accepted.
-// Android: OpenGL ES 3.0.
+// Android / Emscripten (MAZE_GLES): OpenGL ES 3.0 (WebGL 2 in the browser).
 // Other desktop platforms: GLSL 1.50 with in/out (typical with GL 3.2+ contexts).
 
 #if defined(__APPLE__)
@@ -89,10 +91,11 @@ void main() {
 }
 )glsl";
 
-#elif defined(__ANDROID__)
+#elif defined(MAZE_GLES)
 
-const std::string vertexShader = R"glsl(
-#version 300 es
+// WebGL requires #version to be the very first line of the source, so the raw
+// literals below must open directly with it (no leading newline).
+const std::string vertexShader = R"glsl(#version 300 es
 
 in vec3 vs_in_pos;
 in vec3 vs_in_norm;
@@ -119,8 +122,7 @@ void main() {
 }
 )glsl";
 
-const std::string vertexShaderUnlit = R"glsl(
-#version 300 es
+const std::string vertexShaderUnlit = R"glsl(#version 300 es
 
 in vec3 vs_in_pos;
 in vec3 vs_in_norm;
@@ -136,8 +138,7 @@ void main() {
 }
 )glsl";
 
-const std::string fragmentShader1 = R"glsl(
-#version 300 es
+const std::string fragmentShader1 = R"glsl(#version 300 es
 precision mediump float;
 
 in vec3 vs_out_pos;
@@ -163,8 +164,7 @@ void main() {
 }
 )glsl";
 
-const std::string fragmentShader2 = R"glsl(
-#version 300 es
+const std::string fragmentShader2 = R"glsl(#version 300 es
 precision mediump float;
 
 in vec2 vs_out_tex;

@@ -39,7 +39,7 @@ static constexpr float kMazeMenuUiFontScale = 2.0f;
 static constexpr float kMazeMenuUiFontScale = 1.0f;
 #endif
 
-#if defined(__ANDROID__)
+#if defined(MAZE_GLES)
 #  include <SDL_log.h>
 namespace {
 
@@ -214,7 +214,7 @@ void drawColorQuad(float x, float y, float w, float h, const GLfloat* rgba) {
 #endif
 
 void DrawUtils::setGLES2DOrtho(float width, float height) {
-#if defined(__ANDROID__)
+#if defined(MAZE_GLES)
     g_ortho2d = glm::ortho(0.0f, width, height, 0.0f, -1.0f, 1.0f);
 #else
     (void)width;
@@ -225,7 +225,7 @@ void DrawUtils::setGLES2DOrtho(float width, float height) {
 void DrawUtils::drawTexture2D(Texture* texture, float x, float y, float scale, float width, float height, float rotationRadians) {
     if (!width) width = texture->getWidth() * scale;
     if (!height) height = texture->getHeight() * scale;
-#if defined(__ANDROID__)
+#if defined(MAZE_GLES)
     drawTexturedQuad(texture->getData(), x, y, width, height, 0.0f, 0.0f, 1.0f, 1.0f, rotationRadians);
 #else
     const float cx = x + 0.5f * width;
@@ -255,7 +255,7 @@ void DrawUtils::drawTexture2D(Texture* texture, float x, float y, float scale, f
 }
 
 void DrawUtils::drawRectangle(SDL_Color color, float x, float y, float width, float height) {
-#if defined(__ANDROID__)
+#if defined(MAZE_GLES)
     GLfloat rgba[4] = { color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, 1.0f };
     drawColorQuad(x, y, width, height, rgba);
 #else
@@ -276,7 +276,7 @@ void DrawUtils::drawBackground2D(Texture* texture) {
     float textureHeight = 32;
     float windowWidth = (float)window->getWidth();
     float windowHeight = (float)window->getHeight();
-#if defined(__ANDROID__)
+#if defined(MAZE_GLES)
     float u1 = windowWidth / textureWidth / 4;
     float v1 = windowHeight / textureHeight / 4;
     drawTexturedQuad(texture->getData(), 0, 0, windowWidth, windowHeight, 0, 0, u1, v1, 0.0f);
@@ -355,7 +355,7 @@ Texture* createTextureFromSurface(SDL_Surface* surface) {
     GLuint texId = 0;
     glGenTextures(1, &texId);
     glBindTexture(GL_TEXTURE_2D, texId);
-#if !defined(__ANDROID__)
+#if !defined(MAZE_GLES)
     glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
 #else
 #endif
@@ -364,7 +364,7 @@ Texture* createTextureFromSurface(SDL_Surface* surface) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface->w, surface->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, surface->pixels);
-#if defined(__ANDROID__)
+#if defined(MAZE_GLES)
     glGenerateMipmap(GL_TEXTURE_2D);
 #endif
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -392,7 +392,7 @@ Texture* renderSpecialsGlyph(int id, SDL_Surface** fonts) {
     SDL_Rect dst = {0, 0, w, h};
     SDL_BlitSurface(fonts[3], &src, result, &dst);
     Texture* texture = createTextureFromSurface(result);
-#if defined(__ANDROID__)
+#if defined(MAZE_GLES)
     // Glyphs are tiny; default surface upload uses REPEAT + mipmaps which can make edge samples wrap
     // or over-minify, clipping the left/top texels. Chevrons need clamp + base-level nearest.
     {

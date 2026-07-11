@@ -44,8 +44,14 @@ static bool keyIsBackOrEscape(const SDL_Keysym& keysym) {
     return keysym.sym == SDLK_ESCAPE;
 }
 #endif
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 #include <nfd.hpp>
+#endif
+#if defined(__EMSCRIPTEN__)
+#include "web_support.h"
+// The web port reuses the Android async map-picker flow (launch, then poll
+// consumePickedMap from the menu/editor loops) with a browser file input.
+namespace maze_picker = maze_web;
 #endif
 #include "gl_compat.h"
 #include "maze.h"
@@ -55,6 +61,7 @@ static bool keyIsBackOrEscape(const SDL_Keysym& keysym) {
 
 #if defined(__ANDROID__)
 #include "android_picker.h"
+namespace maze_picker = maze_android;
 
 static void maze_android_load_asset_lines(const std::string& path, std::vector<std::string>& out) {
     // APK assets are not ordinary filesystem paths; std::ifstream fails. SDL_LoadFile uses the same
@@ -102,7 +109,13 @@ static float chevronTextureScaleForCellSide(float boxSide, float tGlyph) {
 }
 
 Game::Game() {
+#if defined(__EMSCRIPTEN__)
+    // SDL_INIT_EVERYTHING would fail here: the Emscripten SDL2 build lacks
+    // subsystems like haptics, and SDL_Init fails as a whole if any is missing.
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_TIMER) != 0) {
+#else
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
+#endif
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "SDL_Init", SDL_GetError(), nullptr);
         exit(1);
     }
@@ -118,6 +131,12 @@ Game::Game() {
         writableRoot = wb ? std::string(wb) : std::string();
         SDL_free(wb);
     }
+#elif defined(__EMSCRIPTEN__)
+    // Assets are preloaded into MEMFS at /textures, /fonts, /models with the
+    // working directory at "/". /persistent is an IDBFS mount (see main.cpp)
+    // so the config and last.map survive page reloads.
+    assetRoot = "./";
+    writableRoot = "/persistent/";
 #else
     assetRoot = "./";
     writableRoot = "./";
@@ -126,10 +145,12 @@ Game::Game() {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "IMG_Init", IMG_GetError(), nullptr);
         exit(1);
     }
+#if !defined(__EMSCRIPTEN__)
     if (SDLNet_Init() == -1) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "SDLNet_Init", SDLNet_GetError(), nullptr);
         exit(1);
     }
+#endif
     map = nullptr;
     menu = nullptr;
     config = new Config(gameConfigPath());
@@ -181,7 +202,9 @@ Game::~Game() {
     deleteResources();
     deleteShaders();
     IMG_Quit();
+#if !defined(__EMSCRIPTEN__)
     SDLNet_Quit();
+#endif
     SDL_Quit();
 }
 
@@ -272,6 +295,34 @@ GLuint Game::linkShaders(const std::string& vertexShader, const std::string& fra
     return m_loc;
 }
 
+namespace {
+// glGetUniformLocation per draw call is expensive (string lookup, and on
+// WebGL every GL call additionally crosses into JavaScript); locations are
+// constant for a linked program, so resolve them once per program. A location
+// of -1 (uniform absent, e.g. playerPos in the unlit program) is a silent
+// no-op for glUniform*, matching the previous behavior.
+struct ProgramUniforms {
+    GLint mvp, model, modelIT, playerPos, renderDistance, texImage;
+};
+
+std::map<GLuint, ProgramUniforms> g_programUniformCache;
+
+const ProgramUniforms& getProgramUniforms(GLuint program) {
+    auto it = g_programUniformCache.find(program);
+    if (it == g_programUniformCache.end()) {
+        ProgramUniforms uniforms;
+        uniforms.mvp = glGetUniformLocation(program, "mvp");
+        uniforms.model = glGetUniformLocation(program, "model");
+        uniforms.modelIT = glGetUniformLocation(program, "modelIT");
+        uniforms.playerPos = glGetUniformLocation(program, "playerPos");
+        uniforms.renderDistance = glGetUniformLocation(program, "renderDistance");
+        uniforms.texImage = glGetUniformLocation(program, "texImage");
+        it = g_programUniformCache.insert({ program, uniforms }).first;
+    }
+    return it->second;
+}
+}
+
 void Game::loadShaders() {
     m_programID_1 = linkShaders(vertexShader, fragmentShader1);
     m_programID_2 = linkShaders(vertexShaderUnlit, fragmentShader2);
@@ -280,6 +331,8 @@ void Game::loadShaders() {
 void Game::deleteShaders() {
     glDeleteProgram(m_programID_1);
     glDeleteProgram(m_programID_2);
+    // Program ids may be reused by future glCreateProgram calls.
+    g_programUniformCache.clear();
 }
 
 void Game::loadTextures() {
@@ -400,6 +453,11 @@ void Game::loadVehicleMeshes() {
 void Game::run() {
     initMenu();
     while (!quit) {
+#if defined(__EMSCRIPTEN__)
+        // No worker thread on the web: drain whatever the WebSocket delivered
+        // since the last frame (no-op while disconnected).
+        client->pump();
+#endif
         if (screen == Screen::MENU) {
             drawMenu();
             menu->run();
@@ -496,7 +554,11 @@ void Game::run() {
 #endif
                         deleteMenu();
                         setDrawModePerspective();
+#if !defined(__EMSCRIPTEN__)
+                        // Web builds have no worker thread; client->pump() at the
+                        // top of the loop takes over from Client::run().
                         client->start();
+#endif
                     } else {
                         client->disconnectFromServer();
                         client->closeConnection();
@@ -508,12 +570,17 @@ void Game::run() {
                 SDL_PumpEvents();
                 SDL_FlushEvent(SDL_KEYDOWN);
             } else if (subMenu == SubMenu::CHOOSE_DIFFICULTY) {
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
                 {
                     std::string picked;
-                    if (maze_android::consumePickedMap(picked)) {
+                    if (maze_picker::consumePickedMap(picked)) {
                         screen = Screen::GAME;
                         gameMode = GameMode::SINGLE_PLAYER;
+#if defined(__EMSCRIPTEN__)
+                        // Android never grabs the cursor (touch), but on the web the
+                        // game should start with the cursor captured like on desktop.
+                        setRelativeMouseMode(true);
+#endif
                         deleteMenu();
                         camera->reset();
                         std::stringstream ss(picked);
@@ -600,6 +667,12 @@ void Game::run() {
                     config->getData()["game"]["singlePlayer"]["cameraYaw"] = camera->getYaw();
                     config->getData()["game"]["singlePlayer"]["cameraPitch"] = camera->getPitch();
                     map->saveState(lastMapPath());
+#if defined(__EMSCRIPTEN__)
+                    // The Game destructor may never run in a browser (the user
+                    // just closes the tab), so persist the session now.
+                    config->save();
+                    maze_web::persistFS();
+#endif
                 }
                 deleteMap();
                 initMenu();
@@ -1298,11 +1371,11 @@ void Game::handleCollisions() {
 }
 
 void Game::openMap() {
-#if defined(__ANDROID__)
-    // Async on Android: launch the SAF picker and return. The menu loop polls
-    // maze_android::consumePickedMap() each iteration; once the user picks a file the bytes
-    // arrive via the JNI callback and are loaded then.
-    maze_android::launchOpenMapPicker();
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+    // Async on Android and the web: launch the picker (SAF activity / browser
+    // file input) and return. The menu loop polls maze_picker::consumePickedMap()
+    // each iteration; once the user picks a file the bytes are loaded then.
+    maze_picker::launchOpenMapPicker();
 #else
     NFD::Guard nfdGuard;
     NFD::UniquePath fileName;
@@ -1538,14 +1611,15 @@ void Game::drawMesh(const Position& position, Mesh* mesh, GLuint m_loc) {
     glm::mat4 modelIT = glm::inverse(glm::transpose(model)); // model inverse transpose
     glm::mat4 mvp = projection * view * model;
     glm::vec3 playerPos(map->getPlayer()->getPosition().x, map->getPlayer()->getPosition().y, map->getPlayer()->getPosition().z);
-    glUniformMatrix4fv(glGetUniformLocation(m_loc, "mvp"), 1, GL_FALSE, glm::value_ptr(mvp));
-    glUniformMatrix4fv(glGetUniformLocation(m_loc, "model"), 1, GL_FALSE, glm::value_ptr(model));
-    glUniformMatrix4fv(glGetUniformLocation(m_loc, "modelIT"), 1, GL_FALSE, glm::value_ptr(modelIT));
-    glUniform3fv(glGetUniformLocation(m_loc, "playerPos"), 1, glm::value_ptr(playerPos));
-    glUniform1i(glGetUniformLocation(m_loc, "renderDistance"), config->getData()["game"]["renderDistance"]);
+    const ProgramUniforms& uniforms = getProgramUniforms(m_loc);
+    glUniformMatrix4fv(uniforms.mvp, 1, GL_FALSE, glm::value_ptr(mvp));
+    glUniformMatrix4fv(uniforms.model, 1, GL_FALSE, glm::value_ptr(model));
+    glUniformMatrix4fv(uniforms.modelIT, 1, GL_FALSE, glm::value_ptr(modelIT));
+    glUniform3fv(uniforms.playerPos, 1, glm::value_ptr(playerPos));
+    glUniform1i(uniforms.renderDistance, config->getData()["game"]["renderDistance"]);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, mesh->getTexture());
-    glUniform1i(glGetUniformLocation(m_loc, "texImage"), 0);
+    glUniform1i(uniforms.texImage, 0);
     glCompatBindVertexArray(mesh->getVaoID());
     glDrawElements(GL_TRIANGLES, mesh->getIndices().size(), GL_UNSIGNED_INT, 0);
     glCompatBindVertexArray(0);
@@ -1564,12 +1638,13 @@ void Game::drawBillboard(const Position& position, Texture* texture) {
     }
     for (int j = 0; j < 4; ++j) view2[3][j] = j == 3 ? 1.0f : 0.0f;
     glm::mat4 mvp = projection * view * model * glm::transpose(view2);
-    glUniformMatrix4fv(glGetUniformLocation(m_programID_2, "mvp"), 1, GL_FALSE, glm::value_ptr(mvp));
-    glUniformMatrix4fv(glGetUniformLocation(m_programID_2, "model"), 1, GL_FALSE, glm::value_ptr(model));
-    glUniformMatrix4fv(glGetUniformLocation(m_programID_2, "modelIT"), 1, GL_FALSE, glm::value_ptr(modelIT));
+    const ProgramUniforms& uniforms = getProgramUniforms(m_programID_2);
+    glUniformMatrix4fv(uniforms.mvp, 1, GL_FALSE, glm::value_ptr(mvp));
+    glUniformMatrix4fv(uniforms.model, 1, GL_FALSE, glm::value_ptr(model));
+    glUniformMatrix4fv(uniforms.modelIT, 1, GL_FALSE, glm::value_ptr(modelIT));
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture->getData());
-    glUniform1i(glGetUniformLocation(m_programID_2, "texImage"), 0);
+    glUniform1i(uniforms.texImage, 0);
     Mesh* mesh = meshes.at("billboard.obj");
     glCompatBindVertexArray(mesh->getVaoID());
     glDrawElements(GL_TRIANGLES, mesh->getIndices().size(), GL_UNSIGNED_INT, 0);
@@ -1691,11 +1766,16 @@ void Game::drawLoadingScreen() {
     drawUtils->drawBackground2D(textures["background"]);
     drawUtils->drawLabel(labels[3], 6.0f * kInGameTextScale);
     SDL_GL_SwapWindow(window->getWindow());
+#if defined(__EMSCRIPTEN__)
+    // WebGL only composites when control returns to the browser; yield once so
+    // the loading screen is visible while map generation blocks the loop.
+    maze_web::presentFrame();
+#endif
     setDrawModePerspective();
 }
 
 void Game::setDrawModeOrtho() {
-#if defined(__ANDROID__)
+#if defined(MAZE_GLES)
     drawUtils->setGLES2DOrtho((float)window->getWidth(), (float)window->getHeight());
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -1714,12 +1794,12 @@ void Game::setDrawModeOrtho() {
 void Game::setDrawModePerspective() {
     float cameraFov = camera->getMode() == 2 ? 45.0f : (float)config->getData()["game"]["cameraFov"];
     projection = glm::perspective(glm::radians(cameraFov), (float)window->getWidth() / window->getHeight(), cameraZNear, cameraZFar);
-#if !defined(__ANDROID__)
+#if !defined(MAZE_GLES)
     glMatrixMode(GL_MODELVIEW);
 #endif
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
-#if !defined(__ANDROID__)
+#if !defined(MAZE_GLES)
     glEnable(GL_TEXTURE_2D);
 #endif
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -1727,6 +1807,11 @@ void Game::setDrawModePerspective() {
 
 void Game::setRelativeMouseMode(bool mode) {
     relativeMouseMode = mode;
+#if defined(__EMSCRIPTEN__)
+    // Must run before SDL releases pointer lock, so an intentional release is
+    // not mistaken for the user's Escape (see web_support.h).
+    maze_web::setPointerLockIntent(mode);
+#endif
     if (relativeMouseMode) SDL_SetRelativeMouseMode(SDL_TRUE);
     else SDL_SetRelativeMouseMode(SDL_FALSE);
 }

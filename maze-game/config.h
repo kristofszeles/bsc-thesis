@@ -5,6 +5,10 @@
 #include <filesystem>
 #include <nlohmann/json.hpp>
 
+#if defined(__EMSCRIPTEN__)
+#include "web_support.h"
+#endif
+
 using json = nlohmann::json;
 
 class Config {
@@ -66,6 +70,11 @@ public:
         file.open(fileName);
         file << config.dump(2);
         file.close();
+#if defined(__EMSCRIPTEN__)
+        // The file lives on an in-memory FS; flush it to IndexedDB so the
+        // config survives the tab closing.
+        maze_web::persistFS();
+#endif
     }
     json& getData() { return config; }
 };

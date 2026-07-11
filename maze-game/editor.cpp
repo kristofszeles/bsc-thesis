@@ -4,6 +4,10 @@
 #include "editor.h"
 #if defined(__ANDROID__)
 #include "android_picker.h"
+namespace maze_picker = maze_android;
+#elif defined(__EMSCRIPTEN__)
+#include "web_support.h"
+namespace maze_picker = maze_web;
 #endif
 
 #if defined(__ANDROID__)
@@ -56,10 +60,10 @@ void Editor::run() {
 		drawMap();
 		drawGui();
 		int event = handleEvents();
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
 		{
 			std::string picked;
-			if (maze_android::consumePickedMap(picked)) {
+			if (maze_picker::consumePickedMap(picked)) {
 				std::stringstream ss(picked);
 				loadMapWithHeader(ss);
 				updateCamera();
@@ -162,9 +166,11 @@ void Editor::newMap() {
 }
 
 void Editor::saveMap() {
-#if defined(__ANDROID__)
-	// Build the same file content saveMap(fileName) would write, then hand it to MainActivity.java
-	// which prompts the user for a destination URI via SAF and writes the bytes there.
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+	// Build the same file content saveMap(fileName) would write, then hand it over:
+	// on Android MainActivity.java prompts for a destination URI via SAF; on the
+	// web a browser save dialog asks for the destination (or downloads the bytes
+	// where the File System Access API is unavailable).
 	std::stringstream ss;
 	ss << skyboxTexture << "\n";
 	ss << tileTextures.at(selectedTileTexture) << "\n";
@@ -173,7 +179,7 @@ void Editor::saveMap() {
 			ss << block->type << " " << block->x * 3 << " " << 0 << " " << block->y * 3 << " " << block->angle << "\n";
 		}
 	}
-	maze_android::launchSaveMapPicker(ss.str());
+	maze_picker::launchSaveMapPicker(ss.str());
 	return;
 #else
 	NFD::Guard nfdGuard;
@@ -204,10 +210,10 @@ void Editor::saveMap(const std::string& fileName) {
 }
 
 void Editor::openMap() {
-#if defined(__ANDROID__)
-	// Async on Android: launch the SAF picker and return. The editor's main loop polls
-	// maze_android::consumePickedMap() each iteration.
-	maze_android::launchOpenMapPicker();
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+	// Async on Android and the web: launch the picker and return. The editor's
+	// main loop polls maze_picker::consumePickedMap() each iteration.
+	maze_picker::launchOpenMapPicker();
 	return;
 #else
 	NFD::Guard nfdGuard;
@@ -342,6 +348,12 @@ void Editor::drawGui() {
 
 void Editor::updateFrame() {
 	SDL_GL_SwapWindow(drawUtils->getWindow()->getWindow());
+#if defined(__EMSCRIPTEN__)
+	// The editor is a nested loop; yield here so the browser can present the
+	// frame and deliver input events (the editor runs with vsync off natively,
+	// so pace it to ~60 Hz explicitly).
+	maze_web::frameYield();
+#endif
 }
 
 int Editor::handleEvents() {

@@ -2,7 +2,24 @@
 
 #include "window.h"
 
-#if !defined(__ANDROID__)
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/html5.h>
+#include "web_support.h"
+
+// Keep the SDL window (and therefore the canvas render size) in sync with the
+// browser window. SDL_SetWindowSize resizes the canvas and emits
+// SDL_WINDOWEVENT_SIZE_CHANGED, which the existing event handlers pick up.
+static EM_BOOL mazeWebOnResize(int eventType, const EmscriptenUiEvent* uiEvent, void* userData) {
+    (void)eventType;
+    SDL_Window* window = static_cast<SDL_Window*>(userData);
+    if (uiEvent->windowInnerWidth > 0 && uiEvent->windowInnerHeight > 0) {
+        SDL_SetWindowSize(window, uiEvent->windowInnerWidth, uiEvent->windowInnerHeight);
+    }
+    return EM_TRUE;
+}
+#endif
+
+#if !defined(MAZE_GLES)
 void GLAPIENTRY MessageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam) {
     if (type == GL_DEBUG_TYPE_ERROR) std::cout << "OpenGL error: " << message << std::endl;
 }
@@ -13,14 +30,29 @@ Window::Window(const std::string& windowTitle, int windowWidth, int windowHeight
     if (maximized) flags |= SDL_WINDOW_MAXIMIZED;
     if (hidden) flags |= SDL_WINDOW_HIDDEN;
     exit = false;
-#if defined(__ANDROID__)
+#if defined(MAZE_GLES)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 #endif
+#if defined(__EMSCRIPTEN__)
+    // The canvas fills the browser window (see shell.html); the config's saved
+    // window dimensions are meaningless here, so size to the browser instead.
+    {
+        const int browserW = maze_web::browserWindowWidth();
+        const int browserH = maze_web::browserWindowHeight();
+        if (browserW > 0 && browserH > 0) {
+            windowWidth = browserW;
+            windowHeight = browserH;
+        }
+    }
+#endif
     window = SDL_CreateWindow(windowTitle.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, windowWidth, windowHeight, flags);
     context = SDL_GL_CreateContext(window);
-#if !defined(__ANDROID__)
+#if defined(__EMSCRIPTEN__)
+    emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, window, EM_FALSE, mazeWebOnResize);
+#endif
+#if !defined(MAZE_GLES)
     glewExperimental = GL_TRUE;
     if (glewInit() != GLEW_OK) perror("Glew: ");
     if (DEBUG_MODE) {
@@ -63,10 +95,16 @@ void Window::updateMapFrame(glm::mat4& view, const Position& playerPos, Camera* 
         view = glm::lookAt(position, direction, up);
     }
     SDL_GL_SwapWindow(window);
+#if defined(__EMSCRIPTEN__)
+    maze_web::frameYield();
+#endif
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
 void Window::updateMenuFrame() {
     SDL_GL_SwapWindow(window);
+#if defined(__EMSCRIPTEN__)
+    maze_web::frameYield();
+#endif
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }

@@ -5,12 +5,59 @@
 #include "client.h"
 #include "map.h"
 
+#if defined(__EMSCRIPTEN__)
+#include <cstring>
+#include <emscripten.h>
+#include <emscripten/websocket.h>
+
+namespace {
+    // One connection at a time; every callback runs on the main thread (the
+    // build is single-threaded), so plain fields need no locking. Callbacks
+    // may fire while the wasm is suspended in emscripten_sleep — they only
+    // record state, which is safe under Asyncify.
+    struct WebSocketState {
+        EMSCRIPTEN_WEBSOCKET_T handle = 0;
+        std::string rxBuffer;
+        bool open = false;
+        bool failed = false;
+        bool closed = false;
+    };
+    WebSocketState g_ws;
+
+    EM_BOOL mazeWsOnOpen(int, const EmscriptenWebSocketOpenEvent*, void*) {
+        g_ws.open = true;
+        return EM_TRUE;
+    }
+    EM_BOOL mazeWsOnError(int, const EmscriptenWebSocketErrorEvent*, void*) {
+        g_ws.failed = true;
+        return EM_TRUE;
+    }
+    EM_BOOL mazeWsOnClose(int, const EmscriptenWebSocketCloseEvent*, void*) {
+        g_ws.closed = true;
+        g_ws.open = false;
+        return EM_TRUE;
+    }
+    EM_BOOL mazeWsOnMessage(int, const EmscriptenWebSocketMessageEvent* event, void*) {
+        if (event->isText) {
+            // Text frames arrive NUL-terminated; numBytes includes the NUL.
+            g_ws.rxBuffer.append(reinterpret_cast<const char*>(event->data),
+                                 strlen(reinterpret_cast<const char*>(event->data)));
+        } else {
+            g_ws.rxBuffer.append(reinterpret_cast<const char*>(event->data), event->numBytes);
+        }
+        return EM_TRUE;
+    }
+}
+#endif
+
 Client::Client() {
     connected = false;
     receivedMapLoaded = false;
-    socket = nullptr;
     map = nullptr;
+#if !defined(__EMSCRIPTEN__)
+    socket = nullptr;
     socketSet = SDLNet_AllocSocketSet(1);
+#endif
     lastPlayerX = lastPlayerZ = lastPlayerAngle = 0;
 }
 
@@ -29,6 +76,131 @@ void Client::run() {
         }
     }
 }
+
+void Client::disconnectFromServer() {
+    // Only signal the worker thread to stop here. The socket must NOT be closed while
+    // the worker may still be inside receiveMessages()/SDLNet_CheckSockets/SDLNet_TCP_Recv,
+    // otherwise it operates on a freed socket and corrupts the heap. The socket is closed
+    // by closeConnection() once the worker thread has been joined.
+    // (On the web there is no worker thread, but the same ordering keeps
+    // callers uniform: flip the flag here, tear the socket down later.)
+    if (connected) {
+        if (DEBUG_MODE) std::cout << "Disconnecting from the server..." << std::endl;
+        connected = false;
+    }
+}
+
+#if defined(__EMSCRIPTEN__)
+
+void Client::pump() {
+    if (!connected) return;
+    receiveMessages(0);
+    while (!isQueueEmpty()) {
+        std::string message = popMessage();
+        if (DEBUG_MODE) std::cout << "Received message: " << message << std::endl;
+        try {
+            handleMessage(json::parse(message));
+        }
+        catch (std::exception& ex) {
+            if (DEBUG_MODE) std::cout << ex.what() << ": '" << message << std::endl;
+        }
+    }
+}
+
+void Client::connectToServer(const char* host, Uint16 port) {
+    if (DEBUG_MODE) std::cout << "Connecting to " << host << ":" << port << "..." << std::endl;
+    if (!emscripten_websocket_is_supported()) {
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "WebSocket", "This browser does not support WebSockets", nullptr);
+        return;
+    }
+    closeConnection();
+    g_ws = WebSocketState{};
+    // A page served over https may only open secure WebSockets.
+    const bool pageIsHttps = EM_ASM_INT({ return location.protocol === 'https:' ? 1 : 0; }) != 0;
+    const std::string url = std::string(pageIsHttps ? "wss://" : "ws://") + host + ":" + std::to_string(port) + "/";
+    EmscriptenWebSocketCreateAttributes attributes;
+    emscripten_websocket_init_create_attributes(&attributes);
+    attributes.url = url.c_str();
+    attributes.protocols = "binary";  // echoed by maze-server's WebSocket handshake (websockify-compatible)
+    EMSCRIPTEN_WEBSOCKET_T handle = emscripten_websocket_new(&attributes);
+    if (handle <= 0) {
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "WebSocket", "Could not create the WebSocket connection", nullptr);
+        return;
+    }
+    g_ws.handle = handle;
+    emscripten_websocket_set_onopen_callback(handle, nullptr, mazeWsOnOpen);
+    emscripten_websocket_set_onerror_callback(handle, nullptr, mazeWsOnError);
+    emscripten_websocket_set_onclose_callback(handle, nullptr, mazeWsOnClose);
+    emscripten_websocket_set_onmessage_callback(handle, nullptr, mazeWsOnMessage);
+    // Block (Asyncify) until the handshake settles, like SDLNet_TCP_Open does.
+    const Uint32 start = SDL_GetTicks();
+    while (!g_ws.open && !g_ws.failed && !g_ws.closed && SDL_GetTicks() - start < 5000) {
+        emscripten_sleep(25);
+    }
+    if (!g_ws.open) {
+        closeConnection();
+        std::string text = "Could not connect to " + url + "\nIs maze-server running and reachable?";
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Connection failed", text.c_str(), nullptr);
+        return;
+    }
+    if (DEBUG_MODE) std::cout << "Successfully connected to " << url << "." << std::endl;
+    clearQueue();
+    highScores.clear();
+    chatMessages.clear();
+    connected = true;
+}
+
+void Client::closeConnection() {
+    if (g_ws.handle > 0) {
+        emscripten_websocket_close(g_ws.handle, 1000, "bye");
+        emscripten_websocket_delete(g_ws.handle);
+        g_ws.handle = 0;
+    }
+    g_ws.open = false;
+}
+
+void Client::sendMessage(const json& message) {
+    if (!connected || !g_ws.open) return;
+    std::string data = message.dump() + ';';
+    if (emscripten_websocket_send_binary(g_ws.handle, const_cast<char*>(data.data()), data.size()) != EMSCRIPTEN_RESULT_SUCCESS) {
+        if (DEBUG_MODE) std::cout << "emscripten_websocket_send_binary failed" << std::endl;
+    }
+    if (DEBUG_MODE) std::cout << "Sent message: " << data << std::endl;
+}
+
+void Client::receiveMessages(int timeout) {
+    // The onmessage callback appends raw bytes to g_ws.rxBuffer; split complete
+    // ';'-terminated messages into the queue and keep any partial tail.
+    auto drain = [this]() {
+        size_t end = g_ws.rxBuffer.rfind(';');
+        if (end == std::string::npos) return;
+        std::string buffer;
+        for (size_t i = 0; i <= end; ++i) {
+            char character = g_ws.rxBuffer[i];
+            if (character != ';') {
+                buffer += character;
+            } else if (!buffer.empty()) {
+                messageQueue.push(buffer);
+                buffer.clear();
+            }
+        }
+        g_ws.rxBuffer.erase(0, end + 1);
+    };
+    drain();
+    if (timeout > 0) {
+        const Uint32 start = SDL_GetTicks();
+        while (isQueueEmpty() && !g_ws.closed && !g_ws.failed && SDL_GetTicks() - start < (Uint32)timeout) {
+            emscripten_sleep(10);
+            drain();
+        }
+    }
+    if (connected && (g_ws.closed || g_ws.failed)) {
+        disconnectFromServer();
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, nullptr, "Server has stopped", nullptr);
+    }
+}
+
+#else
 
 void Client::connectToServer(const char* host, Uint16 port) {
     IPaddress ip;
@@ -50,17 +222,6 @@ void Client::connectToServer(const char* host, Uint16 port) {
     highScores.clear();
     chatMessages.clear();
     connected = true;
-}
-
-void Client::disconnectFromServer() {
-    // Only signal the worker thread to stop here. The socket must NOT be closed while
-    // the worker may still be inside receiveMessages()/SDLNet_CheckSockets/SDLNet_TCP_Recv,
-    // otherwise it operates on a freed socket and corrupts the heap. The socket is closed
-    // by closeConnection() once the worker thread has been joined.
-    if (connected) {
-        if (DEBUG_MODE) std::cout << "Disconnecting from the server..." << std::endl;
-        connected = false;
-    }
 }
 
 void Client::closeConnection() {
@@ -138,6 +299,8 @@ void Client::receiveMessages(int timeout) {
         }
     }
 }
+
+#endif  // !defined(__EMSCRIPTEN__)
 
 bool Client::init() {
     receiveMessages(1000);

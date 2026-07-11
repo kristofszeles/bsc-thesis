@@ -1,6 +1,10 @@
 #pragma once
 
+#if !defined(__EMSCRIPTEN__)
 #include <SDL_net.h>
+#else
+#include <SDL.h>
+#endif
 #include <atomic>
 #include <string>
 #include <sstream>
@@ -17,13 +21,21 @@ const bool DEBUG_MODE = false;
 
 class Map;
 
+// On the web (Emscripten) the transport is a browser WebSocket instead of a
+// raw TCP socket (browsers cannot open raw TCP): no worker thread runs
+// (start()/join() are never useful in a browser), and Game::run pumps received
+// messages once per frame via pump(). maze-server accepts WebSocket clients
+// natively on its normal game port (see maze-server/websocket.h), so the
+// browser connects directly to the same host:port as native clients.
 class Client : public CppThread {
 private:
     std::atomic<bool> connected;
     bool receivedMapLoaded;
     Map* map;
+#if !defined(__EMSCRIPTEN__)
     TCPsocket socket;
     SDLNet_SocketSet socketSet;
+#endif
     json players, scores;
     float lastPlayerX, lastPlayerZ, lastPlayerAngle;
     std::stringstream receivedMap;
@@ -35,9 +47,16 @@ public:
     Client();
     virtual ~Client() {
         closeConnection();
+#if !defined(__EMSCRIPTEN__)
         SDLNet_FreeSocketSet(socketSet);
+#endif
     }
     void run() override;
+#if defined(__EMSCRIPTEN__)
+    // Single-threaded replacement for the run() worker loop: drain everything
+    // the WebSocket has delivered so far and handle it. Called once per frame.
+    void pump();
+#endif
     void connectToServer(const char* host, Uint16 port);
     void disconnectFromServer();
     void closeConnection();

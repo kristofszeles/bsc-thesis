@@ -19,7 +19,9 @@ private:
     int windowWidth, windowHeight, viewportWidth, viewportHeight;
     SDL_Window* window;
     SDL_GLContext context;
+#if !defined(MAZE_GLES)
     const bool DEBUG_MODE = false;
+#endif
 public:
     Window(const std::string& windowTitle, int windowWidth, int windowHeight, bool maximized = false, bool hidden = false);
     ~Window() {
@@ -43,7 +45,7 @@ public:
         glViewport(0, 0, viewportWidth, viewportHeight);
     }
     void setProjectionMatrixSize(int width, int height) {
-#if !defined(__ANDROID__)
+#if !defined(MAZE_GLES)
         glMatrixMode(GL_PROJECTION);
         glLoadIdentity();
         glOrtho(0, width, height, 0, -1, 1);

@@ -3,7 +3,9 @@
 #include <string>
 #include <vector>
 #include <map>
+#if !defined(__EMSCRIPTEN__)
 #include <SDL_net.h>
+#endif
 
 #include "window.h"
 #include "menu.h"
