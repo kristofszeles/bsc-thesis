@@ -58,8 +58,37 @@ bundle_libs() {
     -s /opt/homebrew/lib -s /usr/local/lib
 }
 
+# Homebrew's sdl2 formula is sdl2-compat: it implements the SDL2 API on top of a
+# real SDL3, loaded at runtime via dlopen("@loader_path/libSDL3.dylib") rather than
+# a normal link-time dependency. dylibbundler only follows otool -L dependencies,
+# so it never sees or bundles this one; without it, the packaged app fails on any
+# Mac that doesn't separately have SDL3 installed via Homebrew. Bundle it manually
+# into the same directory as the other libs, which is where @loader_path resolves to.
+bundle_sdl3() {
+  APP="$1"
+  SDL3_LIB=""
+  for dir in /opt/homebrew/lib /usr/local/lib; do
+    if [ -f "$dir/libSDL3.dylib" ]; then
+      SDL3_LIB="$dir/libSDL3.dylib"
+      break
+    fi
+  done
+  if [ -z "$SDL3_LIB" ]; then
+    echo "error: libSDL3.dylib not found; run: brew install sdl3" >&2
+    exit 1
+  fi
+  mkdir -p "$APP/Contents/libs"
+  cp -L "$SDL3_LIB" "$APP/Contents/libs/libSDL3.dylib"
+  install_name_tool -id "@rpath/libSDL3.dylib" "$APP/Contents/libs/libSDL3.dylib"
+  # install_name_tool invalidates the copy's inherited code signature; on Apple
+  # Silicon dyld refuses to map an unsigned/invalid page, so it must be re-signed.
+  codesign --force --sign - "$APP/Contents/libs/libSDL3.dylib"
+}
+
 bundle_libs "$GAME_APP" "maze-game"
 bundle_libs "$SERVER_APP" "maze-server"
+bundle_sdl3 "$GAME_APP"
+bundle_sdl3 "$SERVER_APP"
 
 # Ad-hoc sign so Gatekeeper is less likely to reject the bundle outright
 if command -v codesign >/dev/null 2>&1; then

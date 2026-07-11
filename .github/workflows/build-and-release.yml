@@ -130,7 +130,9 @@ jobs:
         env:
           HOMEBREW_NO_AUTO_UPDATE: 1
         run: |
-          brew install cmake pkgconf sdl2 sdl2_image sdl2_net glew dylibbundler
+          # sdl2 is Homebrew's sdl2-compat, an SDL2 API shim that dlopens SDL3 at
+          # runtime; install sdl3 too so macos-create-dmg.sh can bundle it.
+          brew install cmake pkgconf sdl2 sdl2_image sdl2_net sdl3 glew dylibbundler
           python3 -m venv "${GITHUB_WORKSPACE}/.ci-venv-macos"
           "${GITHUB_WORKSPACE}/.ci-venv-macos/bin/pip" install --upgrade pip
           "${GITHUB_WORKSPACE}/.ci-venv-macos/bin/pip" install "pillow>=10.0.0"

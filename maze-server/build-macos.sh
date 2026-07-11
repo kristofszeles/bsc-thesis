@@ -16,7 +16,7 @@ fi
 for pkg in sdl2 SDL2_net; do
   pkg-config --exists "$pkg" || {
     echo "Missing pkg-config module '$pkg'. Install dependencies, e.g.:"
-    echo "  brew install sdl2 sdl2_net pkgconf"
+    echo "  brew install sdl2 sdl2_net sdl3 pkgconf"
     exit 1
   }
 done

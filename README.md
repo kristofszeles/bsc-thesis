@@ -79,7 +79,8 @@ cd maze-game && sh build-linux.sh && cd ..
 xcode-select --install
 
 # Dependencies: SDL2, networking, image loading, OpenGL extension loader, pkg-config, CMake
-brew install cmake pkgconf sdl2 sdl2_image sdl2_net glew
+# (Homebrew's sdl2 is sdl2-compat, an SDL2 shim that loads sdl3 at runtime, so it's required too)
+brew install cmake pkgconf sdl2 sdl2_image sdl2_net sdl3 glew
 
 # Build the server
 cd maze-server && sh build-macos.sh && cd ..

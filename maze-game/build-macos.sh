@@ -17,7 +17,7 @@ fi
 for pkg in sdl2 SDL2_image SDL2_net glew; do
   pkg-config --exists "$pkg" || {
     echo "Missing pkg-config module '$pkg'. Install dependencies, e.g.:"
-    echo "  brew install sdl2 sdl2_image sdl2_net glew pkgconf cmake"
+    echo "  brew install sdl2 sdl2_image sdl2_net sdl3 glew pkgconf cmake"
     exit 1
   }
 done
