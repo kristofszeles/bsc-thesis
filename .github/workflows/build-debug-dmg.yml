@@ -1,0 +1,57 @@
+# macOS debug DMG (symbols, -Og, bundled dSYMs) for maze-game and maze-server — CI artifacts only.
+name: Build debug macOS DMG
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-debug-dmg:
+    name: Debug .dmg (macOS)
+    runs-on: macos-latest
+    env:
+      # ci-<sha> like build-and-release: it lands in the DMG filename, and
+      # macos-create-dmg.sh maps non-semver labels to CFBundleShortVersionString 1.0.0.
+      VERSION_LABEL: ci-${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+        run: |
+          # sdl2 is Homebrew's sdl2-compat, an SDL2 API shim that dlopens SDL3 at
+          # runtime; install sdl3 too so macos-create-dmg.sh can bundle it.
+          brew install cmake pkgconf sdl2 sdl2_image sdl2_net sdl3 glew dylibbundler
+          python3 -m venv "${GITHUB_WORKSPACE}/.ci-venv-macos"
+          "${GITHUB_WORKSPACE}/.ci-venv-macos/bin/pip" install --upgrade pip
+          "${GITHUB_WORKSPACE}/.ci-venv-macos/bin/pip" install "pillow>=10.0.0"
+
+      - name: Build (macOS debug)
+        run: |
+          set -euo pipefail
+          (cd maze-server && sh build-macos-debug.sh)
+          (cd maze-game && sh build-macos-debug.sh)
+
+      - name: Create .app bundles and debug DMG
+        run: |
+          export PATH="${GITHUB_WORKSPACE}/.ci-venv-macos/bin:${PATH}"
+          sh scripts/ci/macos-create-dmg.sh "${{ env.VERSION_LABEL }}" debug
+
+      - name: Upload debug DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-macos-debug-dmg-${{ github.sha }}
+          path: bsc-thesis-${{ env.VERSION_LABEL }}-macos-debug.dmg
+          if-no-files-found: error

@@ -149,6 +149,21 @@ jobs:
           export PATH="${GITHUB_WORKSPACE}/.ci-venv-macos/bin:${PATH}"
           sh scripts/ci/macos-create-dmg.sh "${{ env.VERSION_LABEL }}"
 
+      # Debug build reuses the maze-*/maze-* binary paths, so it must run after the
+      # release DMG has been created from the optimized binaries above.
+      - name: Build debug binaries (macOS)
+        if: matrix.package == 'macos'
+        run: |
+          set -euo pipefail
+          (cd maze-server && sh build-macos-debug.sh)
+          (cd maze-game && sh build-macos-debug.sh)
+
+      - name: Create debug DMG (macOS)
+        if: matrix.package == 'macos'
+        run: |
+          export PATH="${GITHUB_WORKSPACE}/.ci-venv-macos/bin:${PATH}"
+          sh scripts/ci/macos-create-dmg.sh "${{ env.VERSION_LABEL }}" debug
+
       - name: Upload artifact (Linux)
         if: matrix.package == 'linux'
         uses: actions/upload-artifact@v4
@@ -175,7 +190,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dist-macos-${{ env.VERSION_LABEL }}
-          path: bsc-thesis-${{ env.VERSION_LABEL }}-macos.dmg
+          path: |
+            bsc-thesis-${{ env.VERSION_LABEL }}-macos.dmg
+            bsc-thesis-${{ env.VERSION_LABEL }}-macos-debug.dmg
           if-no-files-found: error
 
   android-apk:

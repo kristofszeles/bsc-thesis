@@ -2,14 +2,25 @@
 # Build Maze Game.app + Maze Server.app and a compressed DMG (run from repo root).
 # Prerequisites: maze-game/maze-game and maze-server/maze-server already built;
 #                 dylibbundler on PATH; repo assets present under maze-game/.
-# Usage: sh scripts/ci/macos-create-dmg.sh <version-label>
+# Usage: sh scripts/ci/macos-create-dmg.sh <version-label> [debug]
+#   With "debug", names the image *-macos-debug.dmg and ships the dSYM bundles
+#   (maze-game/maze-game.dSYM, maze-server/maze-server.dSYM) alongside the apps.
 
 set -e
 VERSION="$1"
+VARIANT="${2:-release}"
 if [ -z "$VERSION" ]; then
-  echo "usage: $0 <version-label>" >&2
+  echo "usage: $0 <version-label> [debug]" >&2
   exit 1
 fi
+case "$VARIANT" in
+  release) SUFFIX="" ;;
+  debug) SUFFIX="-debug" ;;
+  *)
+    echo "usage: $0 <version-label> [debug]" >&2
+    exit 1
+    ;;
+esac
 
 # CFBundleShortVersionString must be major.minor.patch (no leading v)
 SHORT_VER="${VERSION#v}"
@@ -97,14 +108,26 @@ if command -v codesign >/dev/null 2>&1; then
 fi
 
 STAGE="dmg-staging"
-DMG="bsc-thesis-${VERSION}-macos.dmg"
+DMG="bsc-thesis-${VERSION}-macos${SUFFIX}.dmg"
 rm -rf "$STAGE" "$DMG"
 mkdir -p "$STAGE"
 cp -R "$GAME_APP" "$SERVER_APP" "$STAGE/"
 cp "$ROOT/scripts/ci/mac/README-DMG.txt" "$STAGE/Read Me.txt"
 ln -sf /Applications "$STAGE/Applications"
 
-VOLNAME="Maze Game (${VERSION})"
+# Debug builds ship their dSYM bundles so crash reports can be symbolicated.
+# dylibbundler/codesign above don't touch LC_UUID, so the dSYMs still match.
+if [ "$VARIANT" = "debug" ]; then
+  for d in maze-game/maze-game.dSYM maze-server/maze-server.dSYM; do
+    if [ ! -d "$d" ]; then
+      echo "error: $d not found (run the build-macos-debug.sh scripts first)." >&2
+      exit 1
+    fi
+    cp -R "$d" "$STAGE/"
+  done
+fi
+
+VOLNAME="Maze Game (${VERSION}${SUFFIX})"
 hdiutil create -volname "$VOLNAME" -srcfolder "$STAGE" -format UDZO \
   -imagekey zlib-level=9 -ov "$DMG"
 
