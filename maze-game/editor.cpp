@@ -118,20 +118,20 @@ void Editor::Android::requestScreenKeyboardOnTap() {
 	if (!editor->showInput) return;
 	Window* win = editor->drawUtils->getWindow();
 	if (!win || !win->getWindow()) return;
-	if (SDL_HasScreenKeyboardSupport() == SDL_TRUE) {
-		if (SDL_IsScreenKeyboardShown(win->getWindow()) == SDL_TRUE) {
-			return;
-		}
-	} else {
-		if (SDL_IsTextInputActive()) {
-			return;
-		}
-	}
+	if (keyboardDismissedByUser) return;
+	const bool shown = (SDL_HasScreenKeyboardSupport() == SDL_TRUE)
+		&& (SDL_IsScreenKeyboardShown(win->getWindow()) == SDL_TRUE);
+	if (shown) return;
+	// Force a re-show: gesture-nav back can hide the IME without flipping SDL_IsTextInputActive,
+	// so a plain SDL_StartTextInput would be a no-op. Stop first to clear any stale state.
 	if (SDL_IsTextInputActive()) {
 		SDL_StopTextInput();
 	}
 	SDL_StartTextInput();
 	setTextInputRect();
+	prevTextInputActive = true;
+	prevKeyboardShown = (SDL_HasScreenKeyboardSupport() == SDL_TRUE)
+		&& (SDL_IsScreenKeyboardShown(win->getWindow()) == SDL_TRUE);
 	SDL_RaiseWindow(win->getWindow());
 }
 
@@ -139,14 +139,35 @@ void Editor::Android::syncTextInputState() {
 	Window* win = editor->drawUtils->getWindow();
 	if (!win || !win->getWindow()) return;
 	if (editor->showInput) {
-		if (!SDL_IsTextInputActive()) {
-			SDL_StartTextInput();
+		const bool active = SDL_IsTextInputActive();
+		const bool shown = (SDL_HasScreenKeyboardSupport() == SDL_TRUE)
+			&& (SDL_IsScreenKeyboardShown(win->getWindow()) == SDL_TRUE);
+		// Detect dismissal two ways: (a) SDL flipped IsTextInputActive off — happens when the
+		// IME path through onKeyPreIme fires SDL_StopTextInput; (b) the IME visibility flipped
+		// off while SDL still thinks text input is active — happens with Android's gesture-nav
+		// back, which hides the IME without delivering KEYCODE_BACK to the app.
+		if ((prevTextInputActive && !active) || (prevKeyboardShown && !shown)) {
+			keyboardDismissedByUser = true;
 		}
-		setTextInputRect();
+		if (!active && !keyboardDismissedByUser) {
+			SDL_StartTextInput();
+			setTextInputRect();
+			prevTextInputActive = SDL_IsTextInputActive();
+		} else if (active) {
+			setTextInputRect();
+			prevTextInputActive = true;
+		} else {
+			prevTextInputActive = false;
+		}
+		prevKeyboardShown = (SDL_HasScreenKeyboardSupport() == SDL_TRUE)
+			&& (SDL_IsScreenKeyboardShown(win->getWindow()) == SDL_TRUE);
 	} else {
 		if (SDL_IsTextInputActive()) {
 			SDL_StopTextInput();
 		}
+		keyboardDismissedByUser = false;
+		prevTextInputActive = false;
+		prevKeyboardShown = false;
 	}
 }
 #endif
@@ -366,8 +387,53 @@ int Editor::handleEvents() {
 #if defined(__ANDROID__)
 		case SDL_FINGERDOWN:
 			if (showInput) {
-				android.requestScreenKeyboardOnTap();
+				const float w = (float)drawUtils->getWindow()->getViewportWidth();
+				const float h = (float)drawUtils->getWindow()->getViewportHeight();
+				const float px = event.tfinger.x * w;
+				const float py = event.tfinger.y * h;
+				// Android reserves a strip on the left and right edges for the system back
+				// gesture; a swipe starting there must not be misread as a tap-to-reshow —
+				// otherwise the back gesture that should close this prompt re-raises the
+				// keyboard instead. The bottom 59px strip is the menu bar (see drawGui);
+				// tapping it is not a request to type either.
+				const float edgeInset = fmaxf(48.0f, w * 0.05f);
+				if (px > edgeInset && px < w - edgeInset && py < h - 59.0f) {
+					android.keyboardTap.active = true;
+					android.keyboardTap.fingerId = event.tfinger.fingerId;
+					android.keyboardTap.x = px;
+					android.keyboardTap.y = py;
+					android.keyboardTap.startTicks = SDL_GetTicks();
+				} else {
+					android.keyboardTap.active = false;
+				}
 			}
+			break;
+		case SDL_FINGERMOTION:
+			if (android.keyboardTap.active && event.tfinger.fingerId == android.keyboardTap.fingerId) {
+				const float w = (float)drawUtils->getWindow()->getViewportWidth();
+				const float h = (float)drawUtils->getWindow()->getViewportHeight();
+				const float px = event.tfinger.x * w;
+				const float py = event.tfinger.y * h;
+				if (std::hypot(px - android.keyboardTap.x, py - android.keyboardTap.y) > 32.0f) {
+					android.keyboardTap.active = false;
+				}
+			}
+			break;
+		case SDL_FINGERUP:
+			if (showInput && android.keyboardTap.active && event.tfinger.fingerId == android.keyboardTap.fingerId) {
+				const float w = (float)drawUtils->getWindow()->getViewportWidth();
+				const float h = (float)drawUtils->getWindow()->getViewportHeight();
+				const float px = event.tfinger.x * w;
+				const float py = event.tfinger.y * h;
+				const float edgeInset = fmaxf(48.0f, w * 0.05f);
+				const bool liftedAtEdge = (px <= edgeInset || px >= w - edgeInset);
+				const float d = std::hypot(px - android.keyboardTap.x, py - android.keyboardTap.y);
+				if (!liftedAtEdge && d <= 32.0f && (float)(SDL_GetTicks() - android.keyboardTap.startTicks) <= 450.0f) {
+					android.keyboardDismissedByUser = false;
+					android.requestScreenKeyboardOnTap();
+				}
+			}
+			android.keyboardTap.active = false;
 			break;
 #endif
 		case SDL_MOUSEWHEEL:
@@ -381,7 +447,14 @@ int Editor::handleEvents() {
 		case SDL_MOUSEBUTTONDOWN:
 #if defined(__ANDROID__)
 			if (showInput && event.button.button == SDL_BUTTON_LEFT) {
-				android.requestScreenKeyboardOnTap();
+				// Touches arrive again as synthetic mouse events (SDL_TOUCH_MOUSEID); those
+				// are handled by the FINGERDOWN/FINGERUP tap tracker above. Only a real
+				// mouse click may re-raise the keyboard directly.
+				if (event.button.which != SDL_TOUCH_MOUSEID
+					&& event.button.y < drawUtils->getWindow()->getViewportHeight() - 59.0f) {
+					android.keyboardDismissedByUser = false;
+					android.requestScreenKeyboardOnTap();
+				}
 				break;
 			}
 #endif

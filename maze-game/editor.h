@@ -67,6 +67,25 @@ private:
 #if defined(__ANDROID__)
 	struct Android {
 		Editor* editor = nullptr;
+		// Tap tracker for tap-to-reshow-keyboard: confirming on FINGERUP (short, mostly
+		// stationary, away from the screen edges) keeps the system back-gesture swipe —
+		// which also arrives as FINGERDOWN/FINGERUP — from being misread as a tap.
+		struct KeyboardTap {
+			bool active = false;
+			SDL_FingerID fingerId = 0;
+			float x = 0.0f, y = 0.0f;
+			Uint32 startTicks = 0;
+		};
+		KeyboardTap keyboardTap;
+		// Latches when the user dismisses the IME (system back gesture, IME's down arrow). On
+		// modern Android the back gesture hides the IME without sending KEYCODE_BACK through
+		// onKeyPreIme, so SDL_IsTextInputActive stays TRUE — only SDL_IsScreenKeyboardShown
+		// (which queries imm.isAcceptingText) reflects the real visibility. The latch blocks
+		// syncTextInputState and requestScreenKeyboardOnTap from re-raising the keyboard until
+		// the size prompt closes or the user explicitly taps to ask for it back.
+		bool keyboardDismissedByUser = false;
+		bool prevTextInputActive = false;
+		bool prevKeyboardShown = false;
 		void setTextInputRect();
 		void requestScreenKeyboardOnTap();
 		void syncTextInputState();
