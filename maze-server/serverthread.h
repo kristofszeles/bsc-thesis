@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <queue>
@@ -15,7 +16,7 @@ class Server;
 
 class ServerThread : public CppThread {
 private:
-    bool stop, initialized;
+    std::atomic<bool> stop, initialized;
     Server* server;
     TCPsocket socket;
     std::string id;

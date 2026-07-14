@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <list>
 #include <queue>
 #include <string>
@@ -25,7 +26,7 @@ class ServerThread;
 
 class Server : public CppThread {
 private:
-	bool stop;
+	std::atomic<bool> stop;
     int counter;
     int port;
     json players, scores;
@@ -33,7 +34,7 @@ private:
 	IPaddress ip;
 	TCPsocket serverSocket;
     Map* map;
-    std::recursive_mutex mtx;
+    mutable std::recursive_mutex mtx;
 	std::list<ServerThread*> serverThreads;
     std::queue<std::string> messageQueue;
     const std::string CONFIG_FILE_NAME = "server-config.json";
@@ -43,6 +44,7 @@ private:
     void generateMap();
     void handleMessageQueue();
     void acceptConnection();
+    void reapStoppedThreads();
     void broadcastMessage(const json& message);
     void broadcastNewMap();
     void broadcastKickAll();
@@ -65,7 +67,7 @@ public:
     void broadcastJoinGame(const std::string& id);
     void broadcastLeaveGame(const std::string& id);
     void broadcastMovePlayer(const std::string& id, float x, float z, float angle);
-    bool isPlayerExists(const std::string& id) const { return players.contains(id); }
+    bool isPlayerExists(const std::string& id) const { std::lock_guard<std::recursive_mutex> lck(mtx); return players.contains(id); }
     bool isPlayerNameExists(const std::string& name) const;
     json& getPlayers() { return players; }
     json& getScores() { return scores; }
@@ -73,5 +75,5 @@ public:
     json& getPlayer(const std::string& id) { return players[id]; }
     Map* getMap() const { return map; }
     int getCounter() const { return counter; }
-    std::string getPlayerName(const std::string& id) const { return players[id]["name"]; }
+    std::string getPlayerName(const std::string& id) const { std::lock_guard<std::recursive_mutex> lck(mtx); return players[id]["name"]; }
 };

@@ -111,9 +111,17 @@ Server::~Server() {
 }
 
 void Server::handleMessageQueue() {
-    while (!messageQueue.empty()) {
-        std::string message = messageQueue.front();
-        messageQueue.pop();
+    // Take the whole queue under the lock (client threads push into it via
+    // broadcastMessage), but send outside it: sendBytes can block, and holding
+    // mtx there would stall every client thread.
+    std::queue<std::string> pending;
+    {
+        std::lock_guard<std::recursive_mutex> lck(mtx);
+        std::swap(pending, messageQueue);
+    }
+    while (!pending.empty()) {
+        std::string message = pending.front();
+        pending.pop();
         message += ';';
         int length = message.size();
         if (!length) continue; // empty string
@@ -134,14 +142,39 @@ void Server::acceptConnection() {
     TCPsocket clientSocket = SDLNet_TCP_Accept(serverSocket);
     if (!clientSocket) return;
     ServerThread* serverThread = new ServerThread(this, clientSocket, sole::uuid4().str());
-    serverThreads.push_back(serverThread);
+    {
+        std::lock_guard<std::recursive_mutex> lck(mtx);
+        serverThreads.push_back(serverThread);
+    }
     serverThread->start();
+}
+
+void Server::reapStoppedThreads() {
+    std::list<ServerThread*> stopped;
+    {
+        std::lock_guard<std::recursive_mutex> lck(mtx);
+        for (auto it = serverThreads.begin(); it != serverThreads.end();) {
+            if ((*it)->isStopped()) {
+                stopped.push_back(*it);
+                it = serverThreads.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    // Join outside the lock: a dying thread may still be inside a broadcast*
+    // call that needs mtx, and joining it while holding mtx would deadlock.
+    for (ServerThread* thread : stopped) {
+        thread->join();
+        delete thread;
+    }
 }
 
 void Server::run() {
     while (!stop) {
         handleMessageQueue();
         acceptConnection();
+        reapStoppedThreads();
     }
 }
 
@@ -167,6 +200,9 @@ void Server::generateMap() {
 }
 
 void Server::handleCommand(const std::string& line) {
+    // Runs on the main (stdin) thread; serverThreads, players and scores are
+    // owned by the server/client threads.
+    std::lock_guard<std::recursive_mutex> lck(mtx);
     std::istringstream ss(line);
     std::vector<std::string> params;
     std::string param;
@@ -363,6 +399,7 @@ void Server::broadcastHighScores() {
 }
 
 bool Server::isPlayerNameExists(const std::string& name) const {
+    std::lock_guard<std::recursive_mutex> lck(mtx);
     for (auto& player : players) {
         if (player["name"] == name) {
             return true;
